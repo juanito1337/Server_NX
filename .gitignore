@@ -1,0 +1,81 @@
+# Licensed Siemens content, customer models and local migration evidence.
+# These sources remain on disk, but must NEVER be uploaded with the project.
+/nx2406/
+/installer_extracted/
+/migration_reports/
+
+# Python environments, caches and generated runtime data.
+.venv/
+venv/
+**/__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+/server/data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.db
+*.db-wal
+*.db-shm
+*.log
+*.syslog
+.coverage
+htmlcov/
+coverage.xml
+
+# Machine-specific configuration and credentials. Only sanitized examples
+# and the explicit Docker test profiles belong in source control.
+/server/settings*.json
+!/server/settings.example.json
+**/settings.local.json
+docker/secrets/
+secrets/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Installers, archives, compiled add-ons and CAD/CAM model data.
+# Include synthetic test fixtures explicitly if they are needed in future.
+*.exe
+*.msi
+*.dll
+*.zip
+*.7z
+*.rar
+*.tar
+*.gz
+*.prt
+*.stp
+*.step
+*.p21
+*.x_t
+*.x_b
+*.igs
+*.iges
+*.jt
+*.krx
+*.dat
+*.dat_bak
+*.pax
+*.mtx
+*.dpv
+*.xlsx
+
+# Editor / operating-system metadata and future client build output.
+.idea/
+.vs/
+node_modules/
+bin/
+obj/
+Thumbs.db
+Desktop.ini
+.DS_Store

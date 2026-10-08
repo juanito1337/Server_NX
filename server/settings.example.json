@@ -1,0 +1,14 @@
+{
+  "data_dir": "C:\\NX_Migration\\ServerData",
+  "sources": {
+    "nx2512-test": "C:\\NX_Migration\\NX2512_AfterInstall",
+    "nx2512-managed": "C:\\NX_Migration\\NX2512_Managed_20261006"
+  },
+  "logs": {
+    "maschinentest-20260923": "C:\\NX_Migration\\TestRuntime\\temp\\Jan14e4f550.syslog"
+  },
+  "standards": {
+    "2406": "C:\\Siemens\\NX2406",
+    "2512": "C:\\Siemens\\NX2512"
+  }
+}

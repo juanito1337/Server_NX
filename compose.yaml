@@ -1,0 +1,43 @@
+name: nx-management
+services:
+  nxserver:
+    image: nx-management:local
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:${NX_WEB_PORT:-8765}:8765"
+    environment:
+      NX_ADMIN_TOKEN_FILE: /run/secrets/nx_admin_token
+    secrets:
+      - nx_admin_token
+    volumes:
+      - type: volume
+        source: management-data
+        target: /data
+      - type: bind
+        source: ./docker/settings.json
+        target: /app/config/settings.json
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+secrets:
+  nx_admin_token:
+    file: ./docker/secrets/admin_token.txt
+volumes:
+  management-data:

@@ -1,0 +1,40 @@
+# Docker Desktop, Linux containers. Only local TEST sources are mounted.
+# Default setup has a separate database; it does not migrate old ServerData.
+services:
+  nxserver:
+    volumes:
+      - type: bind
+        source: ./docker/settings.windows.json
+        target: /app/config/settings.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: C:/NX_Migration/NX2512_Managed_20261006
+        target: /inputs/nx2512-managed
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: C:/Siemens/NX2406
+        target: /standards/2406
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: C:/Siemens/NX2512
+        target: /standards/2512
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: C:/NX_Migration/TestRuntime/temp
+        target: /logs/nx-test
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: C:/NX_Migration/DockerReleases
+        target: /data/r
+        bind:
+          create_host_path: false

@@ -1,0 +1,53 @@
+'use strict';
+/* Native library workflows share the authenticated API helpers in app.js.
+ * No HTML from file names, database values, or API responses is executed. */
+globalThis.NXNative = (() => {
+  const el = id => document.getElementById(id);
+  let nativeData = null, importPreview = null, catalogPreview = null, hashes = {};
+  const geometryTests = {units:'Einheiten / Maßstab',orientation:'Werkzeugachse / Orientierung',mount_point:'Bezugspunkt / Montage',cutting_geometry:'Schneidende Geometrie',non_cutting_geometry:'Nichtschneidende Geometrie / Halter',collision_geometry:'Kollisionsgeometrie'};
+  const run = fn => async () => { try { await fn(); } catch(e) { message(e.message,true); } };
+  function setGeometry(value={}) {
+    el('geometry-mode').value=value.mode||'none';el('geometry-status').value=value.status||'needs_preparation';
+    el('geometry-version').value=value.nx_version||'';el('geometry-evidence').value=value.evidence||'';hashes=value.asset_hashes||{};
+    Object.keys(geometryTests).forEach(k=>el('geometry-'+k).checked=value.checks?.[k]===true);
+  }
+  function resourceFields() { return {origin:editing?.origin||null,geometry:{mode:el('geometry-mode').value,status:el('geometry-status').value,nx_version:el('geometry-version').value,evidence:el('geometry-evidence').value,checks:Object.fromEntries(Object.keys(geometryTests).map(k=>[k,el('geometry-'+k).checked])),asset_hashes:hashes}}; }
+  function renderFields() {
+    el('native-fields').replaceChildren();let cam;try{cam=JSON.parse(el('cam').value);}catch{return;}
+    if(!cam.records||!cam.schemas)return;
+    cam.records.forEach((record,index)=>{const box=document.createElement('fieldset'),legend=document.createElement('legend');legend.textContent=`Zeile ${index+1}: ${record.block_id}`;box.append(legend);const grid=document.createElement('div');grid.className='grid';const schema=cam.schemas.find(s=>s.id===record.block_id);if(!schema)return;
+      schema.fields.forEach(field=>{const label=document.createElement('label');label.textContent=field;const input=document.createElement('input');input.value=record.values[field]??'';input.oninput=()=>{const current=JSON.parse(el('cam').value);current.records[index].values[field]=input.value;el('cam').value=JSON.stringify(current,null,2);};label.append(input);grid.append(label);});box.append(grid);el('native-fields').append(box);});
+  }
+  function importBody() { return {source:el('source').value,nx_version:el('nxversion').value,name:el('release-name').value,normalize_libraries:el('normalize').checked,legacy_version:el('legacy-version').value,defaults:JSON.parse(el('import-defaults').value),resolutions:JSON.parse(el('import-resolutions').value),legacy_omissions:JSON.parse(el('legacy-omissions').value)}; }
+  function invalidateImport() { importPreview=null;el('import').disabled=true;el('import-state').textContent='Vorschau neu berechnen, bevor importiert werden kann.'; }
+  function renderConflicts(preview) {
+    el('conflicts').replaceChildren();preview.conflicts.forEach(c=>{const tr=document.createElement('tr');cell(tr,c.library+' / '+(c.key||'—'));cell(tr,c.source||'—');cell(tr,c.reason);const td=cell(tr,'');td.append(button('Vergleich',()=>details(c)));
+      if(c.key){const select=document.createElement('select');options(select,{'':'Noch entscheiden',standard:'Ziel behalten / Kundengruppe nicht übernehmen',...(c.type==='data'?{customer:'Kundengruppe übernehmen'}:{})});select.onchange=()=>{const decisions=JSON.parse(el('import-resolutions').value);decisions[c.library]??={};decisions[c.library][c.source]??={};if(select.value)decisions[c.library][c.source][c.key]=select.value;else delete decisions[c.library][c.source][c.key];el('import-resolutions').value=JSON.stringify(decisions,null,2);invalidateImport();};td.append(select);}
+      else if(c.library==='unmapped-legacy-database'){const select=document.createElement('select');options(select,{'':'Noch klären',omit:'Diese zusätzliche Alt-Datenbank ausdrücklich nicht übernehmen'});select.onchange=()=>{const omitted=JSON.parse(el('legacy-omissions').value).filter(p=>p!==c.source);if(select.value==='omit')omitted.push(c.source);el('legacy-omissions').value=JSON.stringify(omitted,null,2);invalidateImport();};td.append(select);}el('conflicts').append(tr);});
+  }
+  async function loadInventory() {
+    if(!el('library-release').value)throw new Error('Zuerst einen vollständigen Datenstand importieren.');
+    const data=await api('releases/'+el('library-release').value+'/libraries');details(data);
+    options(el('native-library'),Object.fromEntries(data.libraries.map(s=>[s.id,`${s.label} · ${s.id} · ${s.object_count??'?'} Objekte`])));
+    el('catalog-libraries').replaceChildren();data.libraries.forEach(s=>{const label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.value=s.id;check.checked=true;check.onchange=()=>catalogPreview=null;label.append(check,document.createTextNode(`${s.label} (${s.id})`));el('catalog-libraries').append(label);});nativeData=null;catalogPreview=null;
+  }
+  async function loadNative() {
+    nativeData=await api('releases/'+el('library-release').value+'/libraries/'+encodeURIComponent(el('native-library').value)+'?query='+encodeURIComponent(el('library-query').value));details(nativeData);
+    options(el('native-block'),Object.fromEntries(nativeData.schemas.map(b=>[b.id,`${b.id} · ${b.fields.length} Spalten`])));
+    el('native-objects').replaceChildren();nativeData.items.forEach(item=>{const tr=document.createElement('tr');cell(tr,item.key);cell(tr,item.cam.records.length+' Zeilen');cell(tr,'').append(button('Datensatz ansehen',()=>details(item.cam)));el('native-objects').append(tr);});
+  }
+  function catalogBody() { return {libraries:[...el('catalog-libraries').querySelectorAll('input:checked')].map(i=>i.value),include_standard:el('include-standard').checked}; }
+  Object.entries(geometryTests).forEach(([key,text])=>{const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.id='geometry-'+key;label.append(input,document.createTextNode(text));el('geometry-checks').append(label);});
+  el('fields-refresh').onclick=run(renderFields);
+  el('geometry-bind').onclick=run(async()=>{const assets=await Promise.all(JSON.parse(el('assetids').value).map(id=>api('assets/'+id+'/metadata')));hashes=Object.fromEntries(assets.map(a=>[a.id,a.sha256]));details(assets);message('Prüfbeleg an diese Dateiprüfsummen gebunden. Keine automatische Geometrieprüfung.');});
+  ['source','nxversion','legacy-version','normalize','import-defaults','import-resolutions','legacy-omissions'].forEach(id=>{el(id).oninput=invalidateImport;el(id).onchange=invalidateImport;});
+  el('import-preview').onclick=run(async()=>{const body=importBody();if(!body.normalize_libraries)throw new Error('Standardbibliotheken-Zusammenführung aktivieren.');el('import-preview').disabled=true;message('Lese Bibliotheken und vergleiche mit Siemens-Standards …');try{importPreview=await api('import-preview','POST',body);renderConflicts(importPreview);details(importPreview);el('import').disabled=!importPreview.can_import;el('import-state').textContent=importPreview.can_import?'Vorschau konfliktfrei. Neuer Ordner ohne Henning-Dierk-Datenbankkopien.':`${importPreview.conflicts.length} Konflikte. Entscheidungen / neue Spaltenwerte ergänzen und Vorschau neu berechnen.`;}finally{el('import-preview').disabled=false;}});
+  async function importFolder() { if(!importPreview?.can_import)throw new Error('Zuerst eine konfliktfreie Vorschau erstellen.');if(!confirm('Geprüften Merge als neuen lokalen Ordner importieren? Quellen bleiben unverändert.'))return;const body={...importBody(),preview_hash:importPreview.preview_hash};el('import').disabled=true;message('Import und Prüfsummenberechnung laufen …');try{details(await api('releases','POST',body));await refresh();message('Neuer Ordner erstellt; noch nicht fachlich freigegeben.');}finally{invalidateImport();} }
+  el('library-inventory').onclick=run(loadInventory);
+  el('native-new').onclick=run(()=>{if(!nativeData)throw new Error('Bibliothek und Schema laden.');reset();el('kind').value=nativeData.kind;const schema=nativeData.schemas.find(b=>b.id===el('native-block').value);el('cam').value=JSON.stringify({library_id:nativeData.id,nx_version:nativeData.nx_version,schemas:[schema],records:[{block_id:schema.id,class_name:schema.class_name,values:Object.fromEntries(schema.fields.map(f=>[f,f==='LIBRF'?'CUSTOM_'+Date.now():'']))}]},null,2);el('geometry-version').value=nativeData.nx_version;renderFields();message('Neuer Schema-Entwurf. Maße, Pflichtwerte und Referenzen fachlich ergänzen.');});
+  el('native-add-row').onclick=run(()=>{if(!nativeData)throw new Error('Passende Bibliothek laden.');const cam=JSON.parse(el('cam').value);if(cam.library_id!==nativeData.id)throw new Error('Schema und Datensatz gehören zu verschiedenen Bibliotheken.');const schema=nativeData.schemas.find(b=>b.id===el('native-block').value);if(!cam.schemas.some(s=>s.id===schema.id))cam.schemas.push(schema);cam.records.push({block_id:schema.id,class_name:schema.class_name,values:Object.fromEntries(schema.fields.map(f=>[f,f==='LIBRF'?cam.records[0].values.LIBRF:'']))});el('cam').value=JSON.stringify(cam,null,2);renderFields();});
+  el('native-library').onchange=()=>nativeData=null;el('library-release').onchange=()=>{nativeData=null;catalogPreview=null;el('catalog-libraries').replaceChildren();};el('include-standard').onchange=()=>catalogPreview=null;
+  el('catalog-preview').onclick=run(async()=>{catalogPreview=await api('releases/'+el('library-release').value+'/catalog-preview','POST',catalogBody());details(catalogPreview);el('catalog-state').textContent=`${catalogPreview.count} neue Objekte, ${catalogPreview.conflicts.length} Konflikte. Import legt Entwürfe an, keine ERP-Artikel und keine NX-Freigaben.`;});
+  el('catalog-import').onclick=run(async()=>{if(!catalogPreview?.can_import)throw new Error('Zuerst konfliktfreie Stammdatenvorschau laden.');if(!confirm(`${catalogPreview.count} Datensätze als Entwürfe übernehmen?`))return;details(await api('releases/'+el('library-release').value+'/catalog-import','POST',{...catalogBody(),preview_hash:catalogPreview.preview_hash}));catalogPreview=null;await refresh();message('Stammdaten übernommen. Werkzeuge brauchen noch CAM-/3D-Prüfung.');});
+  return {resourceFields,renderFields,loadNative,importFolder,reset:()=>{setGeometry();renderFields();},edit:r=>{setGeometry(r.geometry);renderFields();},assetAdded:()=>{hashes={};el('geometry-status').value='needs_preparation';}};
+})();

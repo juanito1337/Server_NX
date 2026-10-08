@@ -1,0 +1,8 @@
+# Allowlist: do not send venv, tests, user settings, DBs or NX model data.
+**
+!Dockerfile
+!requirements-runtime.txt
+!nxserver/
+!nxserver/**
+nxserver/**/__pycache__/
+nxserver/**/*.pyc

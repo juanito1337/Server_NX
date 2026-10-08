@@ -1,0 +1,16 @@
+{
+  "data_dir": "/data",
+  "sources": {
+    "nx2512-managed": "/inputs/nx2512-managed"
+  },
+  "logs": {
+    "maschinentest-20260923": "/logs/nx-test/Jan14e4f550.syslog"
+  },
+  "standards": {
+    "2406": "/standards/2406",
+    "2512": "/standards/2512"
+  },
+  "display_paths": {
+    "/data/r": "C:\\NX_Migration\\DockerReleases"
+  }
+}
