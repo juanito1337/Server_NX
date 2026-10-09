@@ -702,9 +702,25 @@ git diff --cached --check
 git commit -m "Initialer Stand der NX-Migration und Verwaltungsanwendung"
 ```
 
-Fuer das erste Pushen fehlen die vom Benutzer ausgewaehlte Remote-URL und
-gegebenenfalls die Anmeldung beim Anbieter. Es wird kein fremdes/neues Remote
-ohne diese Auswahl angelegt oder ueberschrieben. Erst nach Pruefung eines
-bestehenden Remote-Bestands `origin` setzen und `main` ohne Force-Push hochladen.
+Das vom Benutzer ausgewaehlte zentrale Repository ist seit dem 09.10.2026
+[juanito1337/Server_NX](https://github.com/juanito1337/Server_NX).
+Das lokale Remote `origin` verwendet
+`https://github.com/juanito1337/Server_NX.git`; der Hauptbranch ist `main`.
+Der Remote-Bestand wurde vor dem ersten Push geprueft und war leer. Kein
+bestehender Remote-Commit wird ueberschrieben und es wird kein Force-Push benutzt.
+Fuer HTTPS-Anmeldungen steht unter Windows der installierte Git Credential
+Manager zur Verfuegung. Zugangsschluessel gehoeren weder in die Remote-URL
+noch in das Repository oder den Chat.
+
+```bash
+git remote -v
+git status --short --branch
+git push
+# Bestehende Aenderungen nicht durch einen ungeprueften Merge ueberlagern:
+git pull --ff-only
+```
+
 Weitere Arbeiten koennen ueber `feature/...`-Branches mit geprueften Merges
-nach `main` erfolgen. Der aktuelle Stand ist ein Pilot, keine Produktivfreigabe.
+nach `main` erfolgen. Ein Push aktualisiert ausschliesslich den Quellcode;
+er startet keinen Server und aktiviert keinen NX-Datenstand. Der aktuelle
+Stand ist ein Pilot, keine Produktivfreigabe.
