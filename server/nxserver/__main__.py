@@ -3,7 +3,7 @@ import argparse
 import uvicorn
 
 from .api import create_app
-from .config import startup
+from .config import startup, extraction_settings
 from .store import Store
 
 
@@ -17,7 +17,10 @@ def main():
         parser.error('--port must be between 1 and 65535.')
     settings, token, erp_token, generated = startup(options.settings, options.host)
     store = Store(settings['data_dir'], settings.get('sources'), settings.get('logs'), settings.get('standards'),
-                  settings.get('display_paths'))
+                  settings.get('display_paths'), settings.get('source_roots'), settings.get('target_roots'),settings.get('sidts'))
+    extraction_settings(store,settings)
+    for failure in store.prepare_missing_test_launchers():
+        print('Testpaket konnte nicht vorbereitet werden: ' + str(failure), flush=True)
     if generated:
         print('Lokaler Testschluessel (nur fuer diese Sitzung, in der GUI eingeben): ' + token, flush=True)
     app = create_app(store, token, erp_token)

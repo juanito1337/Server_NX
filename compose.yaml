@@ -22,6 +22,7 @@ services:
         bind:
           create_host_path: false
     read_only: true
+    user: "10001:10001"
     tmpfs:
       - /tmp:size=64m,mode=1777
     cap_drop:

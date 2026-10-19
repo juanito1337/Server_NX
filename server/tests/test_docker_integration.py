@@ -14,12 +14,17 @@ from pathlib import Path
 
 import pytest
 
+from docker_fixture_policy import validate_fixture_profile
+
 
 @pytest.mark.skipif(os.environ.get('NX_DOCKER_TEST') != '1', reason='Opt-in actual local Docker Engine integration.')
 def test_image_runtime_readonly_sources_and_persistence_after_recreation(tmp_path):
     docker = shutil.which('docker') or shutil.which('docker.exe')
     assert docker, 'Docker CLI is required for NX_DOCKER_TEST=1.'
     project_root = Path(__file__).resolve().parents[2]
+    project_name = 'nx-docker-test-' + uuid.uuid4().hex[:12]
+    # Never replace the normal nx-management:local image during an isolated test.
+    image_name = project_name + ':isolated'
     source = tmp_path / 'source'
     database = source / 'MACH/resource/library/tool/metric/tool_database.dat'
     database.parent.mkdir(parents=True)
@@ -35,13 +40,14 @@ def test_image_runtime_readonly_sources_and_persistence_after_recreation(tmp_pat
     secret.write_text(token)
     override = tmp_path / 'override.json'
     override.write_text(json.dumps({'services': {'nxserver': {
+        'image': image_name,
         'build': {'context': str(project_root / 'server')},
-        'volumes': [{'type': 'bind', 'source': str(settings), 'target': '/app/config/settings.json', 'read_only': True},
-                    {'type': 'bind', 'source': str(source), 'target': '/inputs/fixture', 'read_only': True},
-                    {'type': 'bind', 'source': str(releases), 'target': '/data/r'}],
+        'volumes': [{'type': 'bind', 'source': str(settings), 'target': '/app/config/settings.json', 'read_only': True, 'bind': {'create_host_path': False}},
+                    {'type': 'bind', 'source': str(source), 'target': '/inputs/fixture', 'read_only': True, 'bind': {'create_host_path': False}},
+                    {'type': 'bind', 'source': str(releases), 'target': '/data/r', 'bind': {'create_host_path': False}}],
         'restart': 'no'}}, 'secrets': {'nx_admin_token': {'file': str(secret)}}}))
-    # Unique project limits cleanup strictly to this test's own resources.
-    project_name = 'nx-docker-test-' + uuid.uuid4().hex[:12]
+    # A unique project alone is insufficient: edited Compose files can name
+    # another application's volume. Validate the resolved names before up/down.
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
@@ -57,6 +63,24 @@ def test_image_runtime_readonly_sources_and_persistence_after_recreation(tmp_pat
     assert execute(['info', '--format', '{{.OSType}}']) == 'linux'
     prefix = ['compose', '-p', project_name, '--project-directory', str(tmp_path),
               '-f', str(project_root / 'compose.yaml'), '-f', str(override)]
+    resolved = json.loads(execute(prefix + ['config', '--format', 'json']))
+    approved = validate_fixture_profile(resolved, project_name, port, tmp_path, project_root / 'server')
+    # Even a matching random name must never adopt an existing resource.
+    # Fail before the try/finally cleanup if any owned target is already present.
+    probes = [
+        ['volume','ls','--filter','name='+project_name+'_management-data','--format','{{.Name}}'],
+        ['network','ls','--filter','name='+project_name+'_default','--format','{{.Name}}'],
+        ['ps','-a','--filter','label=com.docker.compose.project='+project_name,'--format','{{.ID}}'],
+        ['image','ls','--filter','reference='+image_name,'--format','{{.ID}}'],
+    ]
+    for probe in probes:
+        assert not execute(probe), 'Pre-existing test resources detected; no start or cleanup authorized.'
+    # Pin the approved resolved profile. Later edits/interpolation of the source
+    # YAML must not redirect either startup or the destructive test-only cleanup.
+    frozen = tmp_path / 'verified-compose.json'
+    with frozen.open('x', encoding='utf-8') as output:
+        json.dump(approved, output)
+    prefix = ['compose', '-p', project_name, '--project-directory', str(tmp_path), '-f', str(frozen)]
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     def api(path, data=None):
         request = urllib.request.Request(f'http://127.0.0.1:{port}/api/v1/{path}',
@@ -87,6 +111,6 @@ def test_image_runtime_readonly_sources_and_persistence_after_recreation(tmp_pat
         assert not api('active')['release_id']
         assert database.read_bytes() == original
     finally:
-        # Only this unique, newly created test project/volume is removed.
+        # Use only the approved pinned profile and its exact owned volume name.
         # Never use prune, production names or the nx-management project here.
         execute(prefix + ['down', '--volumes'], timeout=120)

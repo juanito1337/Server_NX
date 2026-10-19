@@ -27,6 +27,7 @@ dist/
 .coverage
 htmlcov/
 coverage.xml
+/server/test-results/
 
 # Machine-specific configuration and credentials. Only sanitized examples
 # and the explicit Docker test profiles belong in source control.
@@ -34,6 +35,8 @@ coverage.xml
 !/server/settings.example.json
 **/settings.local.json
 docker/secrets/
+docker/upgrade-inputs.*.json
+!docker/upgrade-inputs.example.json
 secrets/
 .env
 .env.*

@@ -24,7 +24,7 @@ def pilot(tmp_path):
     database.parent.mkdir(parents=True)
     database.write_text(DATABASE, encoding='utf-8')
     log = tmp_path / 'test.syslog'
-    log.write_text('APP_ENTERED_APPLICATION_ENVIRONMENT_CALLBACK_ID UG_APP_MANUFACTURING.\n' + str(source), encoding='utf-8')
+    log.write_text('NX_VERSION = 2512.8500\nAPP_ENTERED_APPLICATION_ENVIRONMENT_CALLBACK_ID UG_APP_MANUFACTURING.\n' + str(source), encoding='utf-8')
     store = Store(tmp_path / 'managed', {'test': source}, {'test-log': log})
     with TestClient(create_app(store, ADMIN, ERP)) as client:
         yield client, store, source, log
@@ -35,6 +35,13 @@ def imported(client):
                            json={'source': 'test', 'nx_version': '2512', 'name': 'Test release'})
     assert response.status_code == 201, response.text
     return response.json()
+
+
+def pinned_review(client, release, review):
+    scan=client.post('/api/v1/logs/'+review['syslog_source']+'/scan',headers=HEADERS,json={'release_id':release['id']})
+    assert scan.status_code==200,scan.text
+    value=scan.json()
+    return {**review,'expected_log_sha256':value['sha256'],'expected_manifest_sha256':value['manifest_sha256']}
 
 
 def tool_payload(libref='CUSTOM_1'):
@@ -118,7 +125,9 @@ def test_schema_and_collision_fail_closed(pilot):
     assert client.post('/api/v1/resources', headers=HEADERS, json=tool_payload('STD_1')).status_code == 201
     response = client.post('/api/v1/releases/' + original['id'] + '/derive', headers=HEADERS, json={'name': 'Collision'})
     assert response.status_code == 400
-    assert store.releases()[0]['status'] == 'failed'
+    # A known planning conflict is rejected before creating a failed folder/job.
+    # Actual failures after snapshotting still retain their failed release evidence.
+    assert len(store.releases()) == 1 and store.releases()[0]['id'] == original['id']
     assert store.active()['release_id'] is None
 
 
@@ -128,11 +137,11 @@ def test_release_tampering_and_approval_gates(pilot):
     url = '/api/v1/releases/' + release['id']
     assert client.post('/api/v1/active', headers=HEADERS, json={'release_id': release['id'], 'expected_generation': 0}).status_code == 409
     review = {'tests': {key: True for key in FUNCTIONAL_TESTS}, 'evidence': 'Fixture tests passed by qualified CAM reviewer.', 'syslog_source': 'test-log'}
-    log.write_text(log.read_text() + '\n+++ Uid in component and part file do not match', encoding='utf-8')
-    assert client.post(url + '/review', headers=HEADERS, json=review).status_code == 409
+    log.write_text('NX_VERSION = 2512.8500\nUG_APP_MANUFACTURING\n'+release['folder'] + '\n+++ Uid in component and part file do not match', encoding='utf-8')
+    assert client.post(url + '/review', headers=HEADERS, json=pinned_review(client,release,review)).status_code == 409
     assert store.scan_log('test-log')['blocking_errors']
-    log.write_text('UG_APP_MANUFACTURING\n' + release['folder'], encoding='utf-8')
-    assert client.post(url + '/review', headers=HEADERS, json=review).status_code == 200
+    log.write_text('NX_VERSION = 2512.8500\nUG_APP_MANUFACTURING\n' + release['folder'], encoding='utf-8')
+    assert client.post(url + '/review', headers=HEADERS, json=pinned_review(client,release,review)).status_code == 200
     activate = {'release_id': release['id'], 'expected_generation': 0}
     assert client.post('/api/v1/active', headers=HEADERS, json=activate).json()['generation'] == 1
     assert client.post('/api/v1/active', headers=HEADERS, json=activate).status_code == 409
@@ -146,15 +155,15 @@ def test_wrong_log_and_partial_review_cannot_approve(pilot):
     release = imported(client)
     url = '/api/v1/releases/' + release['id'] + '/review'
     review = {'tests': {key: True for key in FUNCTIONAL_TESTS}, 'evidence': 'Fixture tests passed by qualified CAM reviewer.', 'syslog_source': 'test-log'}
-    log.write_text('NX startup without manufacturing test', encoding='utf-8')
-    assert client.post(url, headers=HEADERS, json=review).status_code == 409
-    log.write_text('UG_APP_MANUFACTURING\nC:/other-release', encoding='utf-8')
-    assert client.post(url, headers=HEADERS, json=review).status_code == 409
-    log.write_text('UG_APP_MANUFACTURING\n' + release['source'], encoding='utf-8')
-    assert client.post(url, headers=HEADERS, json=review).status_code == 409
-    log.write_text('UG_APP_MANUFACTURING\n' + release['folder'], encoding='utf-8')
+    log.write_text('NX_VERSION = 2512.8500\nNX startup without manufacturing test', encoding='utf-8')
+    assert client.post(url, headers=HEADERS, json=pinned_review(client,release,review)).status_code == 409
+    log.write_text('NX_VERSION = 2512.8500\nUG_APP_MANUFACTURING\nC:/other-release', encoding='utf-8')
+    assert client.post(url, headers=HEADERS, json=pinned_review(client,release,review)).status_code == 409
+    log.write_text('NX_VERSION = 2512.8500\nUG_APP_MANUFACTURING\n' + release['source'], encoding='utf-8')
+    assert client.post(url, headers=HEADERS, json=pinned_review(client,release,review)).status_code == 409
+    log.write_text('NX_VERSION = 2512.8500\nUG_APP_MANUFACTURING\n' + release['folder'], encoding='utf-8')
     review['tests']['simulation'] = False
-    assert client.post(url, headers=HEADERS, json=review).status_code == 409
+    assert client.post(url, headers=HEADERS, json=pinned_review(client,release,review)).status_code == 409
 
 
 def test_malformed_palette_blocks_validation(pilot):

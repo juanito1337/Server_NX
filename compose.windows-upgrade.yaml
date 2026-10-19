@@ -1,0 +1,46 @@
+# Explicit old NX2406 -> new NX2512 profile. Combine with compose.yaml ONLY,
+# not compose.windows.yaml. The Windows starter supplies these child-only values.
+services:
+  nxserver:
+    volumes:
+      - type: bind
+        source: ./docker/settings.windows-upgrade.json
+        target: /app/config/settings.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${NX_UPGRADE_SOURCE:?Explicit local NX2406 test copy required}
+        target: /inputs/nx2406-local
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: C:/Siemens/NX2406
+        target: /standards/2406
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: C:/Siemens/NX2512
+        target: /standards/2512
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${NX_UPGRADE_SIDT_2406:?Explicit pre-extracted NX2406 SIDT required}
+        target: /sidts/2406
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${NX_UPGRADE_SIDT_2512:?Explicit pre-extracted NX2512 SIDT required}
+        target: /sidts/2512
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: C:/NX_Migration/DockerReleases
+        target: /data/r
+        bind:
+          create_host_path: false

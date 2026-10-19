@@ -50,7 +50,14 @@ def report_for(job):
             'resource_revision': job['resource_revision'], 'nx_version': '2512',
             'input_sha256': job['input']['sha256'], 'tool_type': job['tool_type'],
             'status': 'needs_selection', 'automatic_cam_approval': False,
-            'parts': [], 'components': [], 'files': [], 'errors': [], 'warnings': []}
+            'resource_hash': job['resource_hash'], 'worker_hashes': job['worker_hashes'],
+            'parts': [{'path': path, 'units': 'Millimeters', 'fully_loaded': True,
+                'bodies': [{'id': 'BODY '+str(index), 'name': 'Synthetic', 'solid': True,
+                            'convergent': False, 'face_count': 6, 'layer': 1, 'color': 42}]}
+                for index,path in enumerate(('tool.prt','component.prt'))],
+            'components': [{'id': '/0', 'name': 'Synthetic component', 'part': 'component.prt'}],
+            'files': [{'path': path, 'size': 10, 'sha256': hashlib.sha256(path.encode()).hexdigest()}
+                for path in ('tool.prt','component.prt')], 'errors': [], 'warnings': []}
 
 
 @pytest.mark.parametrize('schema,protocol', [('CONFIG_CONTROL_DESIGN', '203'), ('AUTOMOTIVE_DESIGN', '214'),
@@ -258,13 +265,14 @@ def test_downloaded_worker_contract_with_api_doubles_only(pilot, tmp_path, monke
     assert response.status_code == 200, response.text
 
 
-def test_worker_software_changes_require_new_job(pilot, monkeypatch):
+def test_worker_software_changes_preserve_the_original_job_package(pilot, monkeypatch):
     client, store = pilot
     resource, asset = draft(client)
     job = create_job(client, resource, asset).json()
+    original = GeometryJobs(store).package(job['id'])
     monkeypatch.setattr('nxserver.geometry.worker_sources', lambda: {'nx_step_import.py': b'changed'})
-    with pytest.raises(DomainError, match='software changed'):
-        GeometryJobs(store).package(job['id'])
+    assert GeometryJobs(store).package(job['id']) == original
+    assert hashlib.sha256(original).hexdigest() == job['package_sha256']
 
 
 def test_translator_settings_localize_seeds_and_preserve_source_units(tmp_path):

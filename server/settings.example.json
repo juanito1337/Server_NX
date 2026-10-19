@@ -4,11 +4,30 @@
     "nx2512-test": "C:\\NX_Migration\\NX2512_AfterInstall",
     "nx2512-managed": "C:\\NX_Migration\\NX2512_Managed_20261006"
   },
+  "source_roots": {
+    "testordner": "C:\\NX_Migration"
+  },
+  "target_roots": {
+    "testordner": "C:\\NX_Migration"
+  },
   "logs": {
     "maschinentest-20260923": "C:\\NX_Migration\\TestRuntime\\temp\\Jan14e4f550.syslog"
   },
   "standards": {
     "2406": "C:\\Siemens\\NX2406",
     "2512": "C:\\Siemens\\NX2512"
+  },
+  "sidts": {
+    "2406": "C:\\Users\\Jan\\Documents\\Git\\update_NX\\installer_extracted\\NX2406_V1.11\\app\\nx2406",
+    "2512": "C:\\Users\\Jan\\Documents\\Git\\update_NX\\installer_extracted\\NX2512_V1.14\\app\\nx2512"
+  },
+  "installers": {
+    "2406": {"path": "C:\\Users\\Jan\\Documents\\Git\\update_NX\\Setup_NX2406_V1.11.exe", "sha256": "08396acc471c54848f03cad5a1e5d47718f770c4d6ad078c6a8d39eee11a67a8"},
+    "2512": {"path": "C:\\Users\\Jan\\Documents\\Git\\update_NX\\Setup_NX2512_V1.14.exe", "sha256": "3808f2f16dae99531663c44e45ad57e8de5acfecb54e9f494367681ebb128feb"}
+  },
+  "extractor": {
+    "kind": "innounp",
+    "path": "C:\\NX_Migration\\ServerTools\\innounp-2.71.1\\innounp.exe",
+    "sha256": "94377351f03257b06e221285b16d41108040151ab672b96faf1d3d874a7d0a32"
   }
 }

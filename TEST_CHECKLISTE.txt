@@ -1,0 +1,437 @@
+NX-Verwaltung: erster Praxistest
+Stand: 16.10.2026
+
+Ziel: Den Kernablauf NX2406 -> NX2512 praktisch pruefen.
+Dies ist keine Produktivfreigabe und keine Abnahme der gesamten Anwendung.
+
+Automatisierter Stand vom15.10.2026: vollstaendigeWindowspruefung mit
+3585bestandenen/8ausgelassenenFaellen, keineFehler; zusaetzlicherLinuxkern
+2276bestanden/237ausgelassen. Details und Grenzen in ABNAHMESTAND.txt.
+Die Originalrunden sind beendet; fuer diesen Praxistest ist kein erneuter
+Gesamtlauf und kein STEP-/Assistant-Modell erforderlich. Reale NX-Ergebnisse
+werden dadurch nicht vorweggenommen.
+
+Ergaenzung16.10.: STEP-/Collectorgrenzen gezielt korrigiert und mit 243 Windows-
+Kernfaellen, 8 GUI-Faellen und 4 Originalproben fuer Teile/Koerper/UTF-8-Groesse/
+Collector-Manifest geprueft. Die fruehere 10001-Komponenten-Probe ist separat
+dokumentiert. Modelle werden bei Grenzueberschreitungen nicht still gekuerzt.
+Diese STEP-/Collector-Korrekturen aenderten den Migrationsteil nicht und sind
+kein neuer Gesamtlauf. Die separate Upgrade-Korrektur ist unten beschrieben.
+NeueJournalgrenzen gelten fuerneueAuftraege, altePakete nichtmanuellanpassen.
+
+Zusaetzliche Upgrade-Korrektur: Ein Dateipfad darf nur eine Entscheidung haben,
+auch wenn die Gross-/Kleinschreibung abweicht. Doppelte Angaben werden nicht
+nach dem letzten Wert aufgeloest. GUI-Rohdaten bleiben zur Korrektur erhalten.
+Geprueft mit 152 Kernfaellen je Plattform (Windows 1 OS-Symlinkskip) und 53
+GUI-Faellen. Pilot danach gesichert neu gestartet; neuen Sitzungsschluessel
+aus dem neuen Serverfenster verwenden. Der alte Schluessel ist nicht mehr gueltig.
+
+In Etappe102 nur Oberflaechentext ergaenzt, damals kein weiterer Neustart: Im Editor
+steht jetzt die Unterscheidung zwischen allgemeinen Katalog-Pruefmitteln,
+nativen CMM-Tastern und Dateipaketen.
+Alle 241 originalen NX2512-FORMAT-Definitionen wurden mit synthetischen Kennungen
+in einer isolierten GUI als Entwuerfe gespeichert. Das ist keine Freigabe
+leerer Werte, korrekter Werkzeugmasse oder realer NX-Geometrie.
+
+Etappe103: UI-Profiltypen ddb/rtb/grb/gly/csb/abr/stb/dtx/crb im vorgesehenen
+Profilbaum ergaenzt. 278 Windows-Kernfaelle und 98 verschiedene GUI-Faelle ueber
+mehrere dokumentierte Runden bestanden. Ein Setup-Ladefehler im gemeinsamen
+GUI-Lauf ist erhalten dokumentiert; separate Nachpruefungen bestanden.
+Danach erneut DB-only-Sicherung und kontrollierter Pilotneustart: Verwende den
+NEUESTEN Sitzungsschluessel aus dem neuen Serverfenster. Browser neu laden.
+Fruehere Sitzungsschluessel sind nicht mehr gueltig. Kein neuer Fullrun.
+
+Etappe104: Bereits bestehende1-240-Zeichen-Grenze fuer relative Paketpfade
+auch in Bestandsanzeige/Uebernahme einheitlich vorab geprueft. Zu lange Pfade
+bleiben sichtbar, sind mit Begruendung gesperrt und werden nicht gekuerzt.
+275Windows-Kernfaelle/6OS-Skips,281Linux-Kernfaelle und32GUI-Faelle bestanden.
+Danach erneut gesicherter Pilotneustart: Ausschliesslich den neuesten Schluessel
+aus dem neuesten Serverfenster verwenden. Der vollstaendige Versionswechsel
+wurde durch diese Paketkorrektur nicht veraendert. Kein neuer Gesamtlauf.
+
+Etappe105: Neue Teststarter filtern den NX-Programmsuchpfad und uebernehmen
+keine W:/UNC-/leeren/relativen PATH-Eintraege.110Windows-Kernfaelle,15GUI-
+Faelle und2Originalproben bestanden. Kein Serverneustart/Schluesselwechsel:
+Der neueste Schluessel ausEtappe104 gilt weiter. Fuer bereits geladene ZIPs
+im Server "Test-Starter aktualisieren" waehlen, neu herunterladen und dessen
+Start-NX2512-Test.cmd verwenden. Alte Archive bleiben historisch unveraendert;
+nicht einzelne Skripte austauschen oder Skripthashes manuell anpassen.
+Keine reale NX-Abnahme oder vollstaendige DLL-Sandbox daraus ableiten.
+
+Etappe106: Gesamtablauf mit allen41Bibliotheken nun auch als dauerhafter
+API-/GUI-Integrationstest vorhanden. Je Ablauf39Kunden-/16Altgruppen mit
+ausdruecklichen Spaltenwerten, danach55Katalogentwuerfe, eine taegliche
+Revision, neuer Export und Starterdownload. Beide Modi (rein synthetisch und
+installierte FORMAT-Definitionen mit synthetischen Werten) auf Windows gruen.
+Dies prueft NICHT alle alten FORMAT-Klassen als Migrationsfaelle und ersetzt
+die nachfolgende reale NX-Pruefung nicht. Kein Anwendungscode geaendert,
+kein weiterer Neustart und kein Wechsel des Sitzungsschluessels erforderlich.
+
+Etappe107 erweitert den automatischen Nachweis um alle alten FORMAT-
+Definitionen mit synthetischen Werten:227eindeutigeProjektionen und16echte
+Spaltenergaenzungen. Mehrdeutige Testgruppen bleiben ohne ausdrueckliche
+Entscheidung gesperrt; Auslassen ist bewusst als Auslassen geprueft, nicht
+als erfolgreiche Konvertierung. Dies ersetzt weiterhin keine reale NX-Abnahme.
+Kein Anwendungscode geaendert und kein weiterer Neustart erforderlich.
+Gemeinsame Nachpruefung:70Windows-Kern-/7GUI-Faelle bestanden; Linux68bestanden
+und2expliziteInstallationsskips. Aktueller Umfang3843nur gesammelt, keinFullrun.
+
+Etappe108: Alte Spalten-/Konflikt-/Alt-Datenbank- und Verweisfelder nach
+Quell-/Ziel-/Modus-/Vorschauwechsel oder Abmeldung wirken nicht mehr auf
+aktuelle Eingaben. Gilt auch fuer den vorbereiteten Import.54neueGUI-Faelle,
+final insgesamt148Kernfaelle je Windows/Linux und107GUI-Faelle bestanden.
+Nur Browsercode geaendert: Oberflaeche neu laden, Sitzungsschluessel gilt weiter.
+Kein neuer Gesamtlauf; Produktivverzeichnis und Pilotdaten bleiben unveraendert.
+
+Etappe109: Auch taegliche Exportfelder/Editorlinks/Datei-/DAT-Vergleichszeilen
+gegen alte Ansichten geschuetzt. Aktuelle Mehrspaltenbestaetigung und weitere
+Objekt-/Seitenauswahl bleiben bedienbar.126Kernfaelle jeWindows/Linux gruen,
+107verschiedeneGUI-Faelle ueber dokumentierteNachpruefungen bestanden;
+kein durchgehend gruener61erOriginallauf derKontextgruppe. Details/Abgrenzung
+imEntwicklungsprotokoll. NurBrowsercode:neu laden,aktuellerSchluesselgiltweiter.
+Keine realeNX-Abnahme und kein neuer Gesamtlauf.
+
+Etappe110: Der Upgrade-Wizard prueft nun auch die tatsaechliche Versionskennung
+beider konfigurierten Installationen, nicht nur einen vorhandenen EXE-Dateinamen.
+Statische Metadaten bleiben von Lizenz-/Signatur-/NX-Ausfuehrungspruefung getrennt.
+Final486Windows-Kernfaelle/2bewussteExtraktionsskips,447Linux-Kernfaelle/
+41Plattform-/Optinskips,53GUI-Faelle ohneFehler; Zusatzvertraege je22bestanden/
+1Compose-Optinskip. Kein neuer Gesamtlauf und keine reale NX-Freigabe.
+Nach neuer gepruefter DB-only-Sicherung wurde der Pilot kontrolliert neu gestartet.
+Browser neu laden und den neuesten Sitzungsschluessel aus dem NEUEN Serverfenster
+verwenden; saemtliche frueheren Sitzungsschluessel sind nicht mehr gueltig.
+Verwaltungsdaten und vorhandene Testordner sind unveraendert geblieben.
+
+Etappe111: Auch auf dem Test-PC muss die EXE tatsaechlich passende NX2512-
+Versionsdaten haben. Falsche Angaben sperren die erste Vorbereitung vor neuen
+Testkonfigurationen bzw. einen spaeteren Start vor Laufzeitdateien. Der Starter
+erkennt auch einen Versions-/Buildwechsel waehrend seiner Vorpruefung.
+325verschiedene gezielteFaelle ueber dokumentierteRunden qualifiziert,
+darunter27GUI-Faelle und alle25Faelle des neuenStartermoduls. Der urspruengliche
+298erWindows-Kernlauf hatte2Testaufbaufehler, spaeter vollstaendig nachgeprueft;
+kein neuer Fullrun und keine realeNX-Freigabe. Details imEntwicklungsprotokoll.
+Kein weiterer Neustart/Schluesselwechsel: neuestenSchluessel ausEtappe110 behalten.
+Fuer alte Pakete "Test-Starter aktualisieren" und das neueZIP vollstaendig
+in einen neuen lokalen Paketordner entpacken. AlteEinzelskripte nicht austauschen.
+
+Etappe112: Zusaetzlich passende SIDT-Deklarationen fuer2406/2512 erforderlich.
+Fehlende/falsche Angaben sperren Vorschauen, Aenderungen danach den Build.
+Deklarationsdatei nicht selbst aendern, um die Sperre aufzuheben; passenden
+vollstaendigen Originalextrakt verwenden. Der Standardaufbau der Ausgabe bleibt.
+303verschiedene gezielteFaelle qualifiziert, allePruefberichte gruen; darunter
+64GUI-Faelle und41SIDT-Faelle. Kein neuer4089erGesamtlauf/keine realeNX-Abnahme.
+Nach neuer DB-only-Sicherung wurde der Pilot erneut kontrolliert neu gestartet.
+Browser neu laden und ausschliesslich den neuestenSchluessel aus dem NEUEN
+Serverfenster verwenden. FruehereSchluessel sind nicht mehr gueltig.
+Verwaltungsdaten und vorhandeneTestordner sind unveraendert.
+
+Etappe113: Ausgewaehlte Extraktionsberichte begrenzt und eindeutig geprueft;
+fehlgeschlagene Voraussetzungenpruefung entwertet eine alte Buildvorschau.
+Defekten Bericht nicht selbst aendern oder neu hashen: eine intakte Extraktion
+ausdruecklich neu auswaehlen, Voraussetzungen und Vorschau erneut pruefen.
+336verschiedene gezielteFaelle bestanden, darunter50GUI-Faelle. Kein neuer
+Gesamtlauf; damals noch kein Pilotneustart. Gebuendelte Bereitstellung sieheEtappe114.
+
+Etappe114: Auch die Dateipaketuebernahme vergleicht gegen die im Wizard
+ausgewaehlte SIDT-Extraktion, wenn kein statischer SIDT-Pfad konfiguriert ist.
+Unveraenderte mitgelieferte Vorlagen/UI-Dateien sind kein Kundenbesitz.
+Echte Abweichungen bleiben als Entwurf uebernehmbar; keine automatische
+Freigabe oder Aenderung bestehender Ordner.310verschiedene gezielteFaelle
+bestanden, darunter54GUI-Faelle; kein neuer4154erGesamtlauf.
+Nach neuer gepruefter DB-only-Sicherung Etappen113/114 gemeinsam bereitgestellt.
+Browser neu laden und ausschliesslich den neuestenSchluessel aus dem NEUEN
+Serverfenster verwenden. Der vorherigeEtappe112-Schluessel ist ungueltig.
+Verwaltungsdaten und bestehendeTestordner sind unveraendert geblieben.
+
+Sicherheitsgrenzen
+- Nur vorhandene lokale Testkopien verwenden, niemals W:\SiemensShare\nx2406.
+  Auch keine Netzwerkpfade oder Verknuepfungen auf das Produktivverzeichnis.
+- Einen NEUEN Zielordner waehlen, der noch nicht existiert, beispielsweise
+  C:\NX_Migration\NX2512_Praxistest_01. Bestehende Testordner nicht ersetzen.
+- Keine Maschine ansteuern, keine Programme in die Fertigung uebertragen.
+- STEP/Tool Assistant, ERP-Modellumstellung und Liveanbindungen bleiben fuer
+  diesen ersten Test ausserhalb des Testumfangs.
+
+1. Oberflaeche oeffnen
+   http://127.0.0.1:8765 im Browser oeffnen.
+   Falls nicht erreichbar: Start-NX-Verwaltung.cmd im Projektordner starten.
+   Einen bereits laufenden Server nicht ein zweites Mal starten.
+   Sitzungsschluessel aus dem Startfenster eingeben und "Verbinden" waehlen.
+   Erwartet: Die drei Arbeitsbereiche sind sichtbar und bedienbar.
+   Der Schluessel gehoert nicht in Screenshots oder Fehlerberichte.
+
+2. Den passenden Importweg waehlen
+   Reiter "Versionsupdate", Abschnitt "Upgrade-Wizard und Ordnerimport".
+   - Fuer eine alte NX2406-Testkopie: Arbeitsablauf
+     "Vollstaendiger Versionswechsel: alte Arbeitskopie -> neuer NX-Ordner".
+     Quellversion 2406, Zielversion 2512 verwenden.
+   - Fuer den schon frueher fertig migrierten NX2512-Testordner: Arbeitsablauf
+     "Bereits vorbereiteten NX-Ordner uebernehmen". Nicht erneut als alte
+     NX2406-Quelle behandeln. Dies prueft den Import, nicht den Versionswechsel.
+   Den konkreten Quellordner mit NX-Netzwerkstruktur und den neuen Zielordner
+   auswaehlen, nicht nur die uebergeordnete Testwurzel.
+
+3. Vorschau pruefen, danach neuen Ordner erstellen
+   Beim vollstaendigen Versionswechsel:
+   "Voraussetzungen pruefen" -> "Vollstaendige Upgrade-Vorschau starten" ->
+   nach erfolgreicher Pruefung "Geprueftes Upgrade als neuen Ordner erstellen".
+   Der Vergleich braucht unveraenderte Siemens-Installationsdaten und statisch
+   extrahierte SIDT-Daten BEIDER Versionen. Ein EXE-Paket allein reicht nicht.
+   Die Voraussetzungen muessen fuer NX2406 und NX2512 jeweils die passende
+   gelesene Versionskennung einschliesslich Build zeigen. Ein falscher oder
+   nicht lesbarer Versionsstand sperrt neue Auftraege vor ihrer Annahme.
+   Zusaetzlich muessen die SIDT-Deklarationen NX2406 und NX2512 angezeigt sein.
+   Die Datei start_apps/env/nx_inst_dir.cmd muss im jeweiligen vollstaendigen
+   SIDT-Extrakt vorhanden sein. Nicht nachtraeglich passend umschreiben.
+   Diese statische Metadatenpruefung bestaetigt weder Lizenz/NX-Start noch
+   Signatur/Echtheit oder vollstaendige Installation. Keine EXE starten.
+   Vorhandenes konfiguriertes Staging muss nicht erneut extrahiert werden.
+   Beim bereits vorbereiteten Ordner:
+   "Merge-Vorschau erstellen" -> "Geprueften Merge als neuen Ordner importieren".
+   Konflikte, neue Spalten und Verweiszuordnungen fachlich pruefen. Keine Werte
+   erraten, nur um eine Sperre aufzuheben. Nach Entscheidungen neu pruefen.
+   Beim Versionswechsel die Liste "Was aendert die Upgrade-Vorschau?" pruefen:
+   insbesondere Kundenanpassungen, ausgelassene Dateien und NX-Kompatibilitaet.
+   Dort sind Suche/Filter und Seiten zu je 50 Hinweisen verfuegbar; diese
+   Anzeige aendert keine Entscheidung und ist noch keine ausgefuehrte Kopie.
+   Erwartet: Der Auftrag erreicht einen erfolgreichen Endzustand und nennt
+   einen neuen NX2512-Datenstand. Die Quelle wird nicht ueberschrieben.
+   Dateivergleich und Kopieren koennen dauern; nicht mehrfach starten.
+   Bei Fehler/Unterbrechung Bericht sichern, keinen Teilordner manuell loeschen.
+
+4. Ergebnis und NX-Start testen
+   Unter "Stammdaten verwalten" -> "NX-Datenstaende und Freigaben" den gerade
+   erzeugten Datenstand waehlen, nicht einen alten blockierten Teststand.
+   Fuer Pakete von vor Etappe111 zuerst "Test-Starter aktualisieren" waehlen
+   und das neue ZIP vollstaendig in einen neuen lokalen Paketordner entpacken.
+   Keine alten Einzelskripte/Hashes manuell ersetzen. Sitzungsschluessel aus
+   Etappe110 bleibt fuer diese reine Starteraenderung gueltig.
+   Einmal "Pruefen" waehlen und den Abschluss abwarten; bei vielen Dateien
+   kann die Dateipruefung dauern. Nicht mehrfach starten. Unter "Details /
+   letztes Pruefergebnis" stehen die lesbare technische Uebersicht und das
+   vollstaendige JSON. Vorhandene Berichte spaeter mit "Details" nur lesen.
+   Blockierende Befunde, Standard-Verweishinweise und gefundene bekannte
+   DAT-Bibliotheken getrennt ansehen; Suche/Filter umfassen alle Eintraege.
+   Ein Standardhinweis ist kein eigener Kundendatenfehler. Unklare Befunde
+   fuer die Rueckmeldung festhalten, nicht durch erfundene Werte beseitigen.
+   Bei blockierenden Befunden zuerst klaeren. Eine technisch unauffaellige
+   Pruefung bestaetigt keine Werkzeuggeometrie, Simulation oder Maschinenfreigabe.
+   "Test-Starter herunterladen" und das GANZE ZIP in einen neuen lokalen
+   Ordner ausserhalb des NX-Datenordners entpacken. LIESMICH.txt lesen.
+   Bestehende NX-Sitzungen schliessen, dann Start-NX2512-Test.cmd ausfuehren.
+   NX2512 und eine passende Lizenz muessen auf diesem Test-PC vorhanden sein.
+   Erwartet: NX2512 startet mit dem neuen Testdatenstand; Benutzerdateien und
+   Protokolle liegen in der separaten Testumgebung, nicht im Releaseordner.
+   Die Datei-/Pruefsummenpruefung beim Start kann mehrere Minuten dauern.
+
+5. In NX gezielt vergleichen
+   Jeweils ein bekanntes Beispiel aus der lokalen NX2406-Testkopie pruefen:
+   [ ] kundenspezifische Maschine/Palette sichtbar und ladbar
+   [ ] Werkzeug-/Halterdaten vorhanden und in einem Testteil verwendbar
+   [ ] verwendete Spannmittel vorhanden und ladbar
+   [ ] benoetigte Vorlagen sowie kundenspezifische Einstellungen vorhanden
+   Nicht verwendete Bereiche als "nicht zutreffend" notieren, nicht als bestanden.
+   Henning-Dierk-Inhalte sollen in den Standardbibliotheken vorkommen, nicht als
+   neu angelegte separate Alt-Datenbanken. DMG_Templates.pax wird wie vereinbart
+   weggelassen. Eine sichtbare Maschine beweist noch keine korrekte Simulation
+   oder einen freigegebenen Postprozessor. Testteile nur separat speichern.
+
+6. Kurze Rueckmeldung
+   Fuer diesen ersten Test keine Freigabe oder Aktivierung erzwingen.
+   Notieren: gewaehlter Arbeitsablauf, Datenstand-/Auftragskennung, geprueftes
+   Beispiel, erwartetes Ergebnis, tatsaechliches Ergebnis und letzter Schritt.
+   Bei Problemen: Fehlermeldung/Screenshot ohne Schluessel und bei Bedarf den
+   Auftragsbericht. NX-Systemprotokoll nur nach Pruefung auf vertrauliche Daten.
+   Den bestehenden Testbestand erhalten, damit Fehler nachvollziehbar bleiben.
+
+Der Server ist derzeit ein lokaler Windows-Pilot, kein abgenommener Docker-/
+SMB-Produktivdienst. Oberflaechen-/Dateitests ersetzen keine CAM-Abnahme.
+Nach diesem Test zuerst die Befunde priorisieren; Stammdaten-Neuanlage,
+3D-Aufbereitung und spaetere Integrationen gesondert abnehmen.
+
+Optional danach: nur die Stammdaten-Entwurfsverwaltung pruefen
+- Eine bekannte native Objektgruppe aus dem neuen lokalen Testdatenstand
+  lesen und "Neuen Entwurf ableiten" waehlen. Eine neue eindeutige
+  TEST-Kennung eingeben, "Kopiervorschau pruefen" und danach
+  "Geprueften neuen Entwurf in Editor uebernehmen" waehlen. Dies bereitet
+  einen ungespeicherten Kundenentwurf vor. Dialoghinweise beachten;
+  bestehende ungespeicherte Eingaben vorher sichern. Keine Werte erraten.
+- Nur Bezeichnung/Entwurf aendern, als Entwurf speichern, danach im Bestand
+  wieder oeffnen und die Historie ansehen. Erwartet: eigene Ressourcen-ID
+  und Revision, Originalobjekt und alter NX-Ordner bleiben unveraendert.
+- Zwischen den drei Reitern wechseln: ungespeicherte Eingaben bleiben erhalten.
+  Ein bewusstes Oeffnen eines anderen aktuellen Datensatzes ersetzt dagegen
+  die Editorwerte. Ein Save ist kein Export in den NX-Ordner.
+- Fuer diesen Metadatentest NICHT auf Freigabe/Export/Aktivierung wechseln,
+  keine Geometriechecks ohne echten NX-Test bestaetigen. Der Entwurf darf
+  deshalb noch nicht als automatisch in NX verfuegbar abgenommen werden.
+- STEP-/Tool-Assistant-Test und ERP-Modellumstellung bleiben wie vereinbart
+  eigene spaetere Abnahmeschritte, nicht Teil dieses ersten Entwurfstests.
+
+Optional: Schema-Arbeitsliste und erhaltene Editorwerte
+- Einen vorhandenen Kundenentwurf zuerst speichern. Unter "Stammdaten
+  verwalten" die "Stammdaten-Schemata fuer einen NX-Datenstand pruefen" und
+  den neuen NX2512-Datenstand waehlen. Eine leere Liste ist bei noch nicht
+  uebernommenen Stammdaten korrekt; keine Dummywerte dafuer anlegen.
+- "Schema-Arbeitsliste pruefen" starten. Bei laengerer Pruefung in den Reiter
+  "Stammdaten anlegen & aufbereiten" wechseln. Erwartet: Die Liste darf im
+  Hintergrund fertig werden, aber keine Editorwerte ersetzen und keine
+  geschlossenen oder neueren globalen Details wieder oeffnen/ueberschreiben.
+- Fuer eine aktuelle, sichtbare Kundenzeile "Im Schemaeditor pruefen" nur
+  bewusst bestaetigen: Diese Aktion darf vorhandene Editorwerte ersetzen.
+  Reiterwechsel oder Schliessen der Arbeitsliste waehrend einer wartenden
+  Oeffnung verwirft dagegen diese alte Anzeigeabsicht. Keine automatische
+  Speicherung oder Aenderung von NX-Dateien durch die Arbeitsliste.
+- Neue Zielspalten und Klassen-/Spaltenzuordnungen weiterhin je Objekt
+  fachlich pruefen und explizit bestaetigen. Diese Navigationspruefung ist
+  weder eine Geometrieabnahme noch ein Export-/Freigabetest.
+- Falls bereits freie CAM-Metadaten mit Dezimalzahlen vorhanden sind, duerfen
+  diese das reine Lesen der Schema-Arbeitsliste anderer Datensaetze nicht
+  blockieren. Keine Testzahlen im Produktivbestand anlegen. Die Lesepruefung
+  bestaetigt keine verlustfreie Bearbeitung grosser JSON-Zahlen im Editor.
+
+Optional: freie CAM-JSON-Metadaten im lokalen Testentwurf
+- Nur einen dafuer vorgesehenen lokalen Testentwurf verwenden, keine native
+  DAT-Objektstruktur durch beliebige Zahlen ersetzen und keine Produktivdaten
+  aendern. Vorhandene Zahlenwerte beim Oeffnen kontrollieren, nur den Namen
+  aendern und bewusst als Entwurf speichern. Die CAM-Zahlen duerfen dadurch
+  nicht gerundet oder zu null werden; die vorherige Historienrevision bleibt.
+- Bei unklarer Speicherantwort zuerst den Beleg pruefen bzw. denselben Versuch
+  bewusst wiederholen. Spaeter eingegebene Werte bleiben ungespeichert erhalten;
+  die Wiederholung darf keine weitere Revision des bereits gespeicherten
+  Versuchs anlegen. Kein automatischer Retry, Export oder NX-Start dadurch.
+- Grosse Ganzzahlen und1.0/-0.0 getrennt von Textwerten pruefen. Der Server
+  verwendet Ganzzahlen/endliche Gleitkommazahlen, keine beliebig genaue
+  Dezimalrechnung. Keine Zahlen aus der DAT-Spaltenmaske in JSON-Zahlen umtypen.
+
+Optional: Aenderungsprotokoll (rein lesend)
+- „Aenderungsprotokoll“ oeffnen; Zeitpunkt, Akteur, Aktion und Nutzdatenumfang
+  kontrollieren. Aeltere Seiten nur bei vorhandenem Bestand pruefen; keine
+  Produktionsaenderungen erzeugen, nur um Seiten zu fuellen.
+- Nach Aktion/Akteur/Datum/Eintragsnummer suchen, dann „Uebersicht neu laden“.
+  Gross-/Kleinschreibung beachten. Die Suche liest keine CAM-/ERP-Nutzdaten.
+- Einen Eintrag bewusst lesen: Original-Nutzdaten und Einzelhashhinweis
+  ansehen. Das ist keine fachliche Freigabe oder vollstaendige Kettenpruefung.
+- Nach Schliessen/Reiterwechsel/Abmeldung darf eine spaete Antwort keine
+  geschlossene Ansicht neu fuellen. Ungespeicherte Editorwerte bleiben bei
+  normalem Reiterwechsel erhalten; Abmelden verwirft wie bisher die Sitzung.
+- Bei neuem Auditkopf die Uebersicht ausdruecklich neu laden. Keine alte
+  Detailansicht als heutigen Stand behandeln. Der JSON-Weg der letzten 200
+  Eintraege bleibt daneben erhalten.
+
+Optional: Dateikonflikte im isolierten NX-Versionswechsel
+- Nur eine lokale Testkopie und einen neuen Zielordner verwenden. Keine
+  Produktivdateien aendern, um Konflikte zu erzeugen. In einer vorhandenen
+  Konfliktvorschau Alt-/Kunden-/Zielhash und „Nicht vorhanden“ kontrollieren.
+- Nach Pfad/Grund suchen und Konfliktart filtern; bei vielen Eintraegen
+  blaettern. Dies darf keine weiteren Vorschau-/Buildauftraege starten.
+- Einzelentscheidungen treffen, dann filtern/zurueckblaettern: Auswahl und
+  JSON muessen zusammenpassen. Eine Wahl alleine darf den Build nicht freigeben.
+- Bei entfallenem Zielstandard bewusst zwischen alter Kundenanpassung und
+  Weglassen im neuen Ordner unterscheiden. Keine Kompatibilitaet vermuten.
+- Vorschau erneut pruefen, dann separat neuen Testordner erstellen. Gewaehlte
+  Dateibytes und gewollte Auslassungen kontrollieren; Quelle bleibt unveraendert.
+  NX-/Maschinenabnahme erfolgt wie bisher separat.
+
+Optional: Entscheidungsfelder im Versionswechsel/vorbereiteten Import
+- Nur eine lokale Testkopie mit vorhandenen Konflikten verwenden. Nach einer
+  Vorschau den Quell-/Zielkontext oder Arbeitsablauf wechseln: Alte Spalten-,
+  Bibliotheks- und Alt-Datenbankfelder duerfen keine aktuellen Entscheidungen
+  mehr schreiben. Ein Pfad-/Moduswechsel hin und zurueck reaktiviert sie nicht.
+- Bei unveraendertem Kontext duerfen mehrere ausdrueckliche Spaltenwerte und
+  Konfliktentscheidungen nacheinander eingegeben werden. Danach ist eine
+  neue Vorschau erforderlich; die Auswahl allein darf keinen Ordner erstellen.
+- Im vorbereiteten Import gehoeren Konflikte zur aktivierten Bibliotheks-
+  zusammenfuehrung. Abschalten entwertet diese Felder, nicht die Quelldateien.
+- Verweiszuordnungen bestaetigen/entfernen nur in der aktuellen Vorschau.
+  Wechsel in einen anderen Reiter oder Abmeldung darf keine alte Aktion
+  auf neue Eingaben anwenden. Dies ist keine fachliche NX-/Geometrieabnahme.
+
+Optional: Aktuelle Entscheidungen im taeglichen Export
+- Nur einen dafuer vorgesehenen lokalen Testdatenstand verwenden. Eine
+  Exportvorschau oeffnen, dann schliessen oder einen anderen Elternstand
+  waehlen: Alte Spaltenfelder/Editorlinks duerfen keine spaeteren Eingaben
+  ersetzen. Ein Elternwechsel hin und zurueck reaktiviert sie nicht.
+- Im gleichen Kontext mehrere erforderliche Spalten bewusst bestaetigen,
+  auch einen fachlich zulaessigen Leerwert nur ausdruecklich. Danach neue
+  Vorschau pruefen. Die erste Bestaetigung darf weitere Felder nicht sperren.
+- Aktuelle Dateiplanlinks duerfen den richtigen Stammdatensatz oeffnen,
+  aber weder automatisch speichern noch bestehende NX-Ordner veraendern.
+  Nach Filterwechsel oder eingeklappter Vergleichsansicht sind alte Zeilen
+  nicht mehr wirksam. Der native Vergleich muss im aktuellen Index weiterhin
+  zwischen verschiedenen Objekten und Vorher-/Nachher-Seiten wechseln koennen.
+- Reiterwechsel/Abmeldung darf keine alte Aktion auf neue Editorentwuerfe
+  anwenden. Dies ist keine Geometrie-/NX-/Produktionsfreigabe.
+
+Optional: Technische Stammdatensuche (nur gespeicherter Bestand)
+- Vorhandene lokale Test-Stammdaten nach exakter LIBRF-/NAME-Kennung suchen,
+  auch wenn diese nicht in der Bezeichnung vorkommt. Klassen und neue
+  Textspalten koennen ebenfalls gesucht werden, auch in nicht sichtbaren
+  Gruppenzeilen. Keine Produktivdaten zum Testen aendern.
+- Bibliotheksfilter fuer metrisch/englisch/CMM und freie Metadaten pruefen.
+  Typ/Status/Exportbelegfilter muessen weiterhin zusammenwirken; Seitenwechsel
+  duerfen keine Revision erzeugen und der Editor muss erhalten bleiben.
+- Bibliotheks-/Kennungsanzeige nur als gespeicherte Metadaten verstehen, nicht
+  als Datei-/Export-/NX-Nachweis. Bei 1:n ERP aktuelle Artikel separat lesen.
+- Nach geaenderter Revision bewusst aktualisieren: Suchergebnis darf keine
+  Werte aus dem alten Snapshot behalten. Abmelden setzt Suche/Filter zurueck.
+
+Optional: Dateipaketeditor mit mehreren Zuordnungen
+- Nur ein lokales Testpaket verwenden. Nach Pfad/geladenem Dateinamen/Anhang-ID
+  suchen und durch die20erSeiten blaettern. Alle Zuordnungen und bestehende
+  Pruefcheckboxen muessen beim reinen Lesen erhalten bleiben.
+- Eine gefilterte Zeile gezielt bearbeiten: Andere Pfade duerfen nicht
+  veraendert werden. Bei „Zuordnung entfernen“ Bestaetigung lesen; Abbrechen
+  muss alles erhalten. Entfernt wird nur die Paketzeile, nie die eigentliche Datei.
+- Nach einer Suche eine bereits zugeordnete Datei neu dem Paket hinzufuegen:
+  Die neue Zuordnung soll auf der letzten Seite sichtbar werden. Keine
+  automatische Datei-/Basenameumbenennung und keine automatische Speicherung.
+- Aenderungen bewusst separat als Entwurf speichern, gesamten Paketumfang
+  einschliesslich anderer Seiten kontrollieren und erst dann neu pruefen.
+- Relative Paketpfade duerfen maximal240Zeichen haben. Ein zu langer Eintrag
+  im vorhandenen Bestand muss sichtbar, aber mit Begruendung nicht auswaehlbar
+  sein. Keine Dateien umbenennen/verschieben oder OS-Langpfadoptionen aendern,
+  nur um diese Pruefung zu umgehen. Diese Grenze gilt nicht pauschal fuer
+  alle Dateien eines vollstaendigen NX-Versionsupdates.
+
+Optional: Historische Pruefbefunde (rein lesend)
+- Bei einem alten Test-Datenstand „Historische Befunde“ waehlen. Die Ansicht
+  muss damalige Pruefzeit/Dateizaehler und ihren historischen Umfang nennen;
+  sie darf keine neue Dateipruefung oder Statusaenderung ausloesen.
+- Befunde suchen/blaettern, Original-JSON bei Bedarf vergleichen. Eine alte
+  Meldung ist keine Aussage ueber den heutigen Zustand; keine Dateien oder
+  Verweiswerte passend aendern, um sie aus dem alten Bericht zu entfernen.
+- Nach neuer Pruefung oder geaendertem Bericht/Stand darf die alte Ansicht
+  nicht als weiterhin gueltig stehenbleiben. Abmelden/Reiterwechsel verwirft
+  sie. Neue technische und fachliche Pruefung erfolgen weiterhin bewusst.
+
+Optional: Datentypwechsel mit vorbereitetem Dateipaket
+- Nur einen neuen lokalen Testentwurf verwenden, keinen bestehenden
+  Stammdatentyp per Browserwerkzeug erzwingen. Ein Vorlagenpaket mit einer
+  bereits zugeordneten Testdatei vorbereiten, dann zu „Pruefmittel“ wechseln.
+- Das Paket muss sichtbar mit Typkonflikt bleiben; kein stilles Verwerfen.
+  Speichern muss den Konflikt vor einer Server-Schreibanfrage melden.
+- Zum urspruenglichen Typ zurueckwechseln: Pfade/Zeilen muessen erhalten,
+  alte Hashbindungen und Pruefcheckboxen aber zurueckgesetzt bleiben.
+- Alternativ Paket bewusst deaktivieren und den neuen Entwurf speichern:
+  keine Paketzuordnungen im gespeicherten Datensatz, aber die separate
+  Datei-/Anhangszuordnung erhalten. Keine NX-Freigabe durch diesen Test.
+
+Optional: NX-Oberflaechenprofile als Entwurf verwalten
+- Nur eigene lokale Testdateien verwenden, keine Dateien vom Produktivlaufwerk.
+  Als UI-Standard anlegen und Profildateien hochladen; neue Typen sind
+  .ddb/.rtb/.grb/.gly/.csb/.abr/.stb/.dtx/.crb. Paketwurzel muss fuer diese Typen
+  UGII/menus/profiles/ sein, nicht roles/ oder ein Maschinen-/Vorlagenordner.
+  Originaldateinamen und erforderliche Unterordner beibehalten.
+- Technische Paketpruefung starten: Dateibytes und Pfade werden geprueft,
+  fachlicher Inhalt bleibt ungeprueft. Hashbindung darf keinen der vier
+  fachlichen Checks automatisch bestaetigen. Synthetische Testbytes NIE fuer
+  NX freigeben oder in einer echten NX-Sitzung laden.
+- Als Entwurf speichern. Zum Weiterbearbeiten den gespeicherten Eintrag in
+  Stammdaten verwalten wieder oeffnen; der Editor wird nach Speichern geleert.
+- Vorhandene Kundenprofile koennen aus einem verwalteten Datenstand uebernommen
+  werden. Die passende Siemens-Baseline samt Profilordner muss vorhanden sein;
+  unveraenderter Standard ist kein Kundenbesitz. Uebernahme bleibt Entwurf.
+- Echte Freigabe/Export erst nach separater NX-Pruefung mit allen Abhaengigkeiten.
+  Maximal100Dateien pro Paket, groessere Profilbestaende bewusst aufteilen.
+  Diese Verwaltung erzwingt noch keine identische UI auf allen Arbeitsplaetzen.

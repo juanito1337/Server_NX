@@ -1,0 +1,677 @@
+NX-Verwaltung: kompakter Abnahmestand
+Stand: 16.10.2026, Etappe 114 (Gesamtbaseline: Etappe96)
+Gesamtauftrag weiterhin aktiv; keine Produktivfreigabe.
+
+Effektive SIDT-Auswahl auch fuer Dateipakete (Etappe114)
+- Bestandsuebernahme und letzter SQL-Commit verwenden nun auch ohne
+  statisch konfigurierten SIDT-Ordner die ausdruecklich ausgewaehlte
+  Extraktion. Unveraenderte mitgelieferte Vorlagen/UI-Dateien werden nicht
+  als Kundenbesitz uebernommen. Ein defekter ausgewaehlter Bericht oder
+  Eingabewechsel vor Commit sperrt die Uebernahme; kein stiller Fallback.
+  Bestehende Kataloge/Ordner/Dateien werden nicht automatisch umgeschrieben.
+- 14echteKerngegenproben und2GUI-Gegenproben reproduziert. Nach Korrektur
+  alle16neuenKernfaelle und beide neuenGUI-Ablaeufe gruen: Standard gesperrt,
+  echte Kundenabweichung als Entwurf, ausdrueckliche Pruefung, neuer Export
+  samt Starter. Erste fehlgeschlagene Runden waren Testalias-Setupfehler,
+  separat erhalten und vor den echten Gegenproben korrigiert.
+- Finaler258erKernlauf/11Module: Windows255bestanden/3Skips, Linux254bestanden/
+  4Skips. Alle54GUI-Faelle/9Module amStueck gruen.310verschiedene bestandene
+  Faelle; Original-JUnit-IDs/Module exakt gegen Collection geprueft, keine
+  Addition von Plattformen oder Teilrunden.4154Faelle/201Module nur gesammelt,
+  kein neuer Gesamtlauf.317Sourcepins stabil.
+- Etappen113/114 gemeinsam bereitgestellt: neue gepruefte DB-only-Sicherung,
+  frische Prozess-/Livehandle-/Idle-/Backupgates und kontrollierter Neustart.
+  Danach alle20Tabellen/Schema/Zeilen unveraendert,13Audits/Aktivgeneration0;
+  ready/idle,23Webdateien exakt/no-store,0privateAPIcalls/JavaScriptfehler.
+  Browser neu laden und den NEUESTEN Sitzungsschluessel aus dem NEUEN
+  Serverfenster verwenden; vorherigerEtappe112-Schluessel ungueltig.
+  Weiter lokaler Windows-Pilot, kein betriebener Docker-/SMB-Produktivserver,
+  keine realeNX-/STEP-Abnahme, kein Produktiv-/Grossarchivzugriff/Commit/Push.
+
+Ausgewaehlte Extraktionsberichte einheitlich pruefen (Etappe113)
+- Upgradeberichte und ausgewaehlte SIDT-Eingaben verwenden denselben
+  SHA-gebundenen, auf64MiB begrenzten JSON-Leser. Doppelte Schluessel,
+  nichtendliche Zahlen, fehlende Bindung sowie unvollstaendige/falsche
+  Extraktionsmetadaten liefern strukturierte Sperren statt interner Fehler.
+  Job-ID/Version werden vor der privaten Berichtspfadwahl geprueft.
+- Eine erneute Voraussetzungenpruefung entwertet sofort die alte Vorschau.
+  Bei defekter ausgewaehlter Eingabe kein stiller Rueckfall auf konfigurierte
+  Ordner. Explizite Auswahl einer neuen intakten Extraktion stellt den Ablauf
+  wieder her; defekter Altbericht bleibt erhalten, kein manuelles Umhashen.
+- Zehn Originalgegenproben fuer den Leser und zwei echte GUI-Gegenproben
+  reproduziert. Finaler288erKernlauf: Windows286bestanden/2bewussteReal-
+  Extraktionsskips, Linux284bestanden/4Plattform-/Optinskips. Alle50GUI-Faelle
+  amStueck gruen, darunter Gesamtbibliotheken/FORMAT/Backup-Wiederanlauf.
+  336verschiedene bestandeneFaelle; IDs/Module exakt gegen Collection geprueft.
+  4136Faelle/199Module nur gesammelt, kein neuer Gesamtlauf.315Pins stabil.
+- Noch KEIN Pilotneustart dieser Etappe: Das laufende Python-Backend ist
+  weiterhinEtappe112. Die Bereitstellung wird mit der anschliessenden
+  Paketuebernahme-Korrektur gebuendelt. Keine Pilot-DB-Schreiboperation,
+  alle20Tabellen/Schema/Zeilen read-only unveraendert. Schluessel bleibt bis
+  zum tatsaechlichen Neustart gueltig. Keine realeNX-/Produktivabnahme.
+
+SIDT-Version explizit pruefen und an den Plan binden (Etappe112)
+- Eine passende NX-EXE und13Kopieranweisungen allein identifizieren das
+  entpackte SIDT nicht. Die ausdrueckliche NX_INST_DIR-Deklaration aus
+  start_apps/env/nx_inst_dir.cmd wird jetzt statisch gelesen und mit der
+  erwarteten Version verglichen. Keine CMD-/Installer-/NX-Ausfuehrung.
+  Drei echte Gegenproben fuer vertauscht/falsch/fehlend reproduziert und behoben.
+- Genau eine unterstuetzte literale Zuweisung, maximal64KiB, keine Auswertung
+  von Shell-/Variablenausdruecken oder Last-assignment-wins. Fehlende Dateien,
+  unlesbare Kodierung und mehrdeutige Angaben liefern klare Sperren.
+  Aeltere Kommentare/Verknuepfungsskripte sind kein Versionsnachweis.
+- GUI zeigt getrennt den NX-Build und beide SIDT-Deklarationen. Neue statische
+  Extraktionen muessen ebenfalls zur angeforderten Version passen. Hashbindung
+  verhindert Kopieren bei Eingabedrift; alte Berichte bleiben lesbar, ohne
+  Deklarationsnachweis keine neue Buildannahme. Marker nicht in Ausgabe kopiert.
+  Keine Signatur-/Herkunfts-/Lizenz-/fachliche Laufzeitfreigabe daraus ableiten.
+- Alle gezielten Berichte gruen: gemeinsamer240erKernlauf Windows238bestanden/
+  2bewussteReal-Extraktionsskips, Linux230bestanden/10Plattform-/Optinskips.
+  FinalerSIDT-Modul41Faelle jePlattform (Linux2Installationsskips) ergaenzt
+  genau einen Kodierungsfall:239verschiedeneWindows-/231Linux-Kernfaelle
+  bestanden. Kein behaupteter einzelner241erLauf;40Modulfaelle sind Duplikate.
+  Alle64GUI-Faelle amStueck bestanden.303verschiedene bestandeneFaelle,
+  keine Addition von Plattformen/Teilrunden. Original-JUnit exakt gegen Collection.
+- Aktuell4089Faelle/197Module nur gesammelt, kein neuer Gesamtlauf.
+  312Sourcepins stabil. Neue gepruefte DB-only-Sicherung und exakte Handle-/
+  Idle-/Backupgates vor Pilotneustart. Danach alle20Tabellen/Schema/Zeilen
+  unveraendert,13Audits/Aktivgeneration0; ready/idle,23Webdateien exakt/no-store,
+  0privateAPIcalls/JS-Fehler. Kein Produktiv-/Grossarchiv-/Modellzugriff.
+- Browser neu laden und NEUESTEN Sitzungsschluessel aus dem NEUEN Serverfenster
+  verwenden; fruehereSchluessel ungueltig. RealeNX-/STEP-Abnahme weiter offen,
+  kein betriebenerDocker-/SMB-Produktivserver und keinCommit/Push.
+
+NX2512 auch auf dem Test-PC pruefen (Etappe111)
+- Der heruntergeladene Starter und die Projekt-Starter pruefen jetzt die
+  lokalen Windows-Versionsdaten, nicht nur Ordnername/EXE-Existenz. Falsche,
+  fehlende oder widerspruechliche NX2512-Metadaten sperren die Vorbereitung
+  bzw. den Start. Drei echte Originalgegenproben reproduziert und behoben.
+- Gemeinsamer begrenzter Metadatenleser mit Dateihash und temporaerem
+  Deny-write/delete-Readhandle. Laufender Starter prueft vor/nach Preflight;
+  auch ein anderer2512-Build im selben Pruefablauf erfordert eine neue Pruefung.
+  Kein Python auf dem Test-PC noetig, keine Signatur-/Lizenz-/NX-Freigabe.
+- Neue25Kernfaelle final vollstaendig gruen; darunter echte parallele Aenderung
+  eigener Dateien waehrend des unveraenderten CheckOnly-Starters. Ein frueher
+  verwendeter Skript-Hook griff nicht, eine instrumentierte Kopie wurde von
+  Windows mit Zugriff-verweigert abgewiesen. Keine Sicherheitsrichtlinie/
+  Berechtigung geaendert; die beiden Testaufbauten wurden ersetzt, nicht die
+  Anwendungssperre abgeschwaecht. Originalberichte bleiben erhalten.
+- 298verschiedeneWindows-Kernfaelle ueber dokumentierte Runden qualifiziert:
+  Original296bestanden/2Testaufbaufehler, danach alle25neuenFaelle bestanden.
+  KEIN behaupteter durchgehend gruener298erOriginallauf. Linux207bestanden/
+  91Plattform-/Optinskips. Alle27GUI-Faelle am Stueck bestanden, einschliesslich
+  Download/Aktualisierung/Versionssperre, Rollen und Gesamtbibliotheken.
+  Insgesamt325verschiedene bestandeneFaelle, keine Plattformdoppelzaehlung.
+- Aktuell4037Faelle/195Module NUR gesammelt; kein neuer Gesamtlauf.
+  309Sourcepins stabil, alle20Pilot-DB-Tabellen/Schema/Zeilen unveraendert.
+  Publicprobe:23Webdateien exakt/no-store,ready/idle,0privateAPIcalls/JS-Fehler.
+- Nur4Starterassets und Tests geaendert, kein Python-Backend/API-/Datenmodell-
+  wechsel. Kein Neustart/Schluesselwechsel: Schluessel ausEtappe110 gilt weiter.
+  Fuer alteZIPs imGUI "Test-Starter aktualisieren", neu herunterladen und
+  ganzesZIP in neuen lokalen Paketordner entpacken. AlteArchive erhalten;
+  keine Einzelskripte/Hashes darin manuell aendern. Keine realeNX-/Produktivabnahme.
+
+Tatsaechliche Installationsversion im Upgrade-Wizard (Etappe110)
+- Die Existenz von NXBIN/ugraf.exe reicht nicht mehr. Der Server liest die
+  PE-Versionsmetadaten beider Installationsreferenzen ohne NX-Start. Falsche,
+  fehlende oder widerspruechliche Versionsdaten sperren neue Upgradeauftraege
+  vor ihrer Annahme. Drei echte Originalgegenproben reproduziert und behoben.
+- GUI nennt erwartete und gelesene Version einschliesslich Buildstand.
+  Die konfigurierten lokalen Eingaben wurden read-only als NX2406.7001 und
+  NX2512.8500 sowie jeweils13SIDT-Kopieranweisungen bestaetigt. Derselbe Leser
+  liefert unter Windows und Linux/WSL identische Dateihashes/Versionsdaten.
+  Keine Ausfuehrungs-, Lizenz-, Signatur-/Echtheits- oder Vollstaendigkeitspruefung.
+- Versionsdateien und SIDT-Anweisungen sind an den Plan gebunden. Aenderungen
+  waehrend Planung oder nach Vorschau erfordern eine neue Vorschau; keine
+  automatische Kopie. Alte Berichte bleiben lesbar, ohne Versionsnachweis
+  aber keine neue Buildannahme. Windows-Stat/Fstat-Execute-Bits im gemeinsamen
+  Leser gezielt vereinheitlicht, POSIX-Rechte und uebrige Identitaetsfelder erhalten.
+- Finale Kernpruefung:488Faelle/20Module, Windows486bestanden/2bewusste
+  Real-Extraktionsskips; Linux447bestanden/41Plattform-/Optinskips.
+  Zusatzvertraege:23Faelle/4Module, je22bestanden/1Compose-Optinskip.
+  Alle53GUI-Faelle am Stueck bestanden, inklusive kompletter41-Bibliotheken-
+  und FORMAT-Matrixablaeufe.561verschiedene bestandene Faelle, keine Addition
+  von Plattformen/Teilrunden. Original-JUnit exakt gegen aktuelle Collection.
+- Aktuell4011Faelle/193Module NUR gesammelt, kein neuer Gesamtlauf.
+  307Sourcepins stabil. Vor Pilotwechsel neue gepruefte DB-only-Sicherung;
+  exakte Prozess-/Kernelhandle-/Idle-/Backupgates vor kontrolliertem Neustart.
+  Alle20Tabellen/Schema/Zeilen unveraendert;13Audits/Aktivgeneration0.
+- Pilot wieder ready/idle,23Webdateien exakt/no-store,0privateAPIcalls/JS-Fehler.
+  Browser neu laden und neuesten Sitzungsschluessel aus dem NEUEN Serverfenster
+  verwenden. Alte Sitzungsschluessel sind ungueltig. Weiter lokaler Windowspilot,
+  kein betriebener Docker-/SMB-Produktivserver; keine reale NX-/Modellabnahme.
+  Produktivlaufwerk und Grossarchiv unberuehrt, kein Commit/Push.
+
+Taeglicher Export: alte Spalten-/Zeilenaktionen entwerten (Etappe109)
+- Fuenf Fehlerarten mit synthetischen Daten reproduziert: Alte Spaltenwerte
+  konnten nach Schliessen noch geschrieben, spaetere Editorentwuerfe durch
+  Konflikt-/Hinweis-/Dateilinks ersetzt und alte DAT-Auswahlen angezeigt werden.
+  Ein anfangs falscher Dateitest-Seitenbereich wurde separat korrigiert;
+  danach auch dieser Originalfall wirklich rot, alle5nachKorrektur gruen.
+- Exportfelder und Links nun an sichtbare Vorschau/Eltern-/Katalogrevision/
+  DOM gebunden. Datei-/DAT-Zeilen zusaetzlich an aktuellen Index/Filter und
+  offene Vergleichsansicht. Alte Ansichten werden nicht durch Hin-/Zurueck-
+  Wechsel reaktiviert. AktuelleLinks oeffnen die passende aktuelle Revision.
+- PositiveNachweise:2neueSpalten nacheinander incl.explizitemLeerwert,
+  exakter neuer Export/erhaltenerStandard/automatischerStarter; aktuelle
+  Editorlinks und Wechsel mehrerer Objekte/Vorher-/Nachherseiten funktionieren.
+  Neuer Browsermodul mit50Faellen; kein engerer Ersatzworkflow eingefuehrt.
+- 126Kernfaelle jeWindows/Linux bestanden.107verschiedeneGUI-Faelle ueber
+  dokumentierteRunden qualifiziert:GruppeB46amStueck gruen; GruppeA59bestanden/
+  2Testaufbaufehler,danach4korrigierteVergleichsfaelle gruen (2davonDuplikate).
+  Also61unterschiedlicheA-Faelle, KEIN durchgehend gruener61erOriginallauf.
+  NurTestaufbau nachgeschaerft,Anwendung dabei unveraendert. Insgesamt233
+  unterschiedlichequalifizierteFaelle, keine Addition von Plattformen/Runden.
+- Aktueller Umfang nur GESAMMELT:3947Faelle/191Module,2743Kern/101Module und
+  1204GUI/90Module; aktuelleWindows-/Linuxartefakte exaktgleich. KEIN neuer
+  3947erFullrun.303Sourcepins stabil; bisherige Gesamtbaseline bleibt historisch.
+- Nur exports.js geaendert,keinPython-/API-/Datenmodell-/Starterwechsel.
+  Pilot ready/idle,23Webdateien exakt/no-store,0privateAPIcalls/JS-Fehler;
+  alle20DB-Tabellen/Schema/Zeilen unveraendert,13Audits/Aktivgeneration0.
+  Browser neu laden,keinNeustart/Schluesselwechsel. Keine realeNX-/Geometrie-
+  oderProduktionsfreigabe,keinProduktiv-/Grossarchivzugriff/Commit/Push.
+
+Alte Entscheidungsfelder schreiben nicht in neue Vorschauen (Etappe108)
+- Reproduzierter Fehler: Bereits entfernte Spalten-, Bibliotheks- und
+  Alt-Datenbankfelder konnten nach einem Zielwechsel noch aktuelle JSON-
+  Entscheidungen aendern. Drei Originalproben rot, nach Korrektur gruen.
+  Zusaetzlich vier echte Folgefaelle beim Modusroundtrip und beim Abschalten
+  der Bibliothekszusammenfuehrung reproduziert und behoben.
+- Aktionen nun an sichtbare Vorschau, Quell-/Ziel-/Versions-/Moduskontext
+  und noch verbundene Controls gebunden. Gilt auch fuer Verweisbestaetigung
+  und Undo sowie den vorbereiteten Import. Pfad-/Moduswechsel hin/zurueck
+  reaktiviert keine alten Felder; andere Reiter/Abmeldung erlauben keine Writes.
+  Mehrere Entscheidungen im selben Kontext bleiben moeglich, keine
+  automatische Loeschung von Formulareingaben oder Erstellung eines Ordners.
+- Neuer Browsermodul mit54Faellen. Finaler gemeinsamer Stand:148Kernfaelle
+  je Windows/Linux und107GUI-Faelle (61+46) bestanden, keine Skips/Fehler.
+  255verschiedene qualifizierteFaelle; Original-/Teilrunden nicht addiert.
+  Darin weiter kompletter41-Bibliotheken-Gesamtablauf, reale neue FORMAT-
+  Spalten mit Testwerten, Bulk-Verweise/Undo und positive vorbereitete Imports.
+- Sieben Fehler der ersten neuen50erTestrunde waren Testaufbau/Selektoren,
+  korrigiert und im finalen Lauf vollstaendig neu geprueft. Originalberichte
+  bleiben erhalten; Details im Entwicklungsprotokoll, kein vertuschter Fullrun.
+- 302Sourcepins stabil. Aktueller Umfang nur GESAMMELT:3897Faelle/190Module,
+  2743Kern/101Module und1154GUI/89Module; ganzeWindows-/Linuxartefakte gleich.
+  KEIN neuer3897erFullrun und keine reale NX-/Produktivabnahme.
+- Nur3Browserdateien geaendert, kein Python-/API-/Datenmodell-/Starterwechsel.
+  Pilot ready/idle,23Webdateien exakt/no-store,0privateAPIcalls/JS-Fehler;
+  alle20DB-Tabellen/Schema/Zeilen unveraendert,13Audits/Aktivgeneration0.
+  Browser neu laden; kein Serverneustart/Schluesselwechsel erforderlich.
+  Kein Zugriff auf Produktivlaufwerk oder Grossarchive, kein Commit/Push.
+
+FORMAT-Matrix und echte neue Zielspalten geprueft (Etappe107)
+- Der neue Matrix-Test verwendet alle235alten/241neuen installierten
+  FORMAT-Definitionen mit selbst erzeugten Werten, keine originalen Modelle
+  oder DATA-Objekte. 227 alte Definitionen passen anhand Klasse/Spalten
+  eindeutig;16davon erhalten echte neue Felder STYPE/DROT/FD. Deren Werte
+  muessen ueber sichtbare GUI-Felder/Checkboxen ausdruecklich bestaetigt werden.
+- Acht Definitionen haben mehrere passende Ziellayouts. Im absichtlich nicht
+  durch RTYPE disambiguierbaren Testaufbau bleibt der Build gesperrt, auch
+  nach Bestaetigen aller neuen Werte. Neun betroffene Gruppen (einschliesslich
+  einer separaten HD-Gruppe) erst nach ausdruecklichem Auslassen uebersprungen.
+  Dies ist KEIN genereller Befund, dass acht Klassen nicht migrierbar sind:
+  reale RTYPE-Zeilen koennen die Kandidaten je Datensatz einschraenken.
+  Keine automatische Layoutwahl oder Behauptung eines 235-Klassen-Erfolgs.
+- Erfolgsfall:241synthetischeZielstandardgruppen/227Kunden-/101HDgruppen,
+  jede ausgegebene Spalte exakt gegen unabhaengig erzeugte Erwartungswerte
+  geprueft, Referenzfehler0. Quellen/alte/neueStandards unveraendert;
+  alle Zieldefinitionen erhalten, alter HD-Aufbau nicht wieder angelegt.
+  Reiner synthetischer CI-Modus bleibt ohne Siemens-Installation nutzbar.
+- Neue Tests:test_format_upgrade_matrix.py und
+  test_format_upgrade_matrix_browser.py; gemeinsame Hilfsdatei
+  format_upgrade_test_support.py. Kein Anwendungscode oder Pilotbestand
+  geaendert, keine reale NX-Ausfuehrung/Geometrie-/Produktionsfreigabe.
+- Gemeinsame finale Nachpruefung mit dem vorherigen Gesamtablauf und den
+  bestehenden Bibliotheks-/Upgrade-/Dateikonflikttests:70Windows-Kernfaelle
+  und7GUI-Faelle bestanden; Linux68bestanden/2expliziteInstallationsskips.
+  77verschiedene qualifizierte Faelle, keine Addition der Plattformen oder
+  ersten Teilrunden. OriginalJUnit/Modulfallzahlen exakt gegen Collection.
+- 301Sourcepins stabil. Aktueller Umfang nur GESAMMELT:3843Faelle/189Module,
+  2743Kern/101Module und1100GUI/88Module; ganze Windows-/Linuxartefakte gleich.
+  KEIN neuer3843erFullrun. Pilot weiter ready/idle,23Webdateien exakt/no-store,
+  keine privaten API-Aufrufe/JS-Fehler; alle20DB-Tabellen/Schema/Daten gleich.
+  Kein Neustart/Schluesselwechsel; neuester Schluessel ausEtappe104 gilt weiter.
+
+Gesamtablauf mit allen 41 Bibliotheken geprueft (Etappe106)
+- Neue dauerhafte API-/GUI-Integrationstests fuer NX2406 -> NX2512:
+  blockierte Vorschau, ausdrueckliche neue Spaltenwerte, neuer Ordner,
+  Henning-Dierk-Zusammenfuehrung, automatischer Test-Starter, Katalogimport,
+  taegliche Revision und daraus abgeleiteter neuer Export samt Starter-ZIP.
+- Zwei Modi: frei erzeugte Schemata mit umgekehrter Zielspaltenreihenfolge
+  und optional nur lesend uebernommene installierte FORMAT-Definitionen.
+  Keine originalen DATA-Objektwerte oder Modelle in den Testdaten/im Git.
+  80 installierte DAT-Dateien/4526915 Bytes vorher/nachher hashgleich.
+- Je Ablauf: 41 neue Standardgruppen, 39 Kundengruppen, 16 fruehere
+  Henning-Dierk-Gruppen; 39 ausdrueckliche Spaltenentscheidungen. Die neue
+  Testspalte ist absichtlich synthetisch, keine erfundene Siemens-Aenderung.
+  Im installierten Modus eine eindeutige FORMAT-Projektion je alter Bibliothek,
+  NICHT saemtliche 235 alten FORMATs als Migrationsfaelle. Alle 241 Ziel-
+  Definitionen bleiben als Schema erhalten. Zwei Fixture-Bibliotheken fehlen
+  nur in der hiesigen alten Installation und kommen aus dem neuen Standard.
+- GUI importiert 55 Kunden-/Altgruppen als Entwuerfe, bearbeitet einen
+  Halter zu Revision2 und exportiert einen neuen Kindstand. Die anderen
+  40 Bibliotheken bleiben bytegleich; Referenzpruefung ohne Fehler. Quelle,
+  beide Siemens-/SIDT-Teststandards und alter Datenstand unveraendert.
+  Optionale DMG-Palette und separate Alt-Datenbanken nicht wieder angelegt.
+- Alle vier neuen dauerhaften Faelle auf Windows bestanden (2 API, 2 GUI).
+  Linux: synthetischer API-Fall bestanden, installierter Modus explizit
+  ausgelassen. Zwei fruehere separate Proben ebenfalls bestanden; wiederholte
+  Plattformlaeufe nicht als neue Faelle gezaehlt. Keine echte NX-/Geometrie-
+  oder Maschinenfreigabe durch den synthetischen approved-Testwert.
+- Kein Anwendungscode geaendert, kein Neustart/Schluesselwechsel/DB-Write.
+  Anonymer Pilot ready/idle,23Webdateien exakt/no-store,keineJS-Fehler;
+  alle20realenDB-Tabellen/Schema/Zeilen unveraendert,13Audits/Aktivgeneration0.
+  298Sourcepins stabil. Aktueller Umfang nur GESAMMELT:3839Faelle/187Module,
+  2741Kern/100Module und1098GUI/87Module; Windows/Linux exaktgleich.
+  KEIN neuer3839erFullrun. Gesamtbaseline Etappe96 bleibt historisch getrennt.
+
+NX-Teststarter: geerbten Programmsuchpfad begrenzen (Etappe105)
+- Echte Luecke: Der berechnete Kindprozess-PATH enthielt zuvor ungefiltert
+  W:/UNC- sowie leere/relative Eintraege des aufrufenden Suchpfads. Reproduziert
+  durch Auswertung der wirklichen Starterzuweisung, ohne diese Werte in eine
+  Prozessumgebung zu setzen oder damit einen Kindprozess zu starten.
+- Neue gemeinsame PATH-Funktion: lokale NXBIN-/UGII-Verzeichnisse zuerst,
+  danach nur vorhandene absolut lokale geerbte Verzeichnisse; Offline-Pfad-
+  pruefung vor Kandidatenzugriff, keine Variablenexpansion, keine leeren/
+  relativen Suchpfade. Unsichere explizite NX-Verzeichnisse brechen ab.
+  Auch ein Semikolon im Installationspfad darf keine zusaetzlichen PATH-
+  Eintraege erzeugen; dieser Folgefall wurde separat reproduziert/abgesichert.
+- Globale Windows-/Benutzer-/Elternprozessumgebung bleibt unveraendert.
+  Kein Nachweis einer kompletten DLL-/NX-Sandbox oder einheitlicher Firmen-UI.
+  MTX-Rollenbindung und CAM-Vorlagenpfade bleiben eigenstaendige Bindungen.
+- Finale Nachpruefung: alle110Windows-Kernfaelle und15GUI-Faelle bestanden;
+  Linux47bestanden/63Windows-spezifischeausgelassen. Dazu2unveraenderte
+  Originalproben gruen.127verschiedene qualifizierteFaelle, keineDoppelzaehlung.
+  Harmloses Ersatzprogramm zeichnet den tatsaechlichen Kindprozess-PATH auf;
+  alle3Startwege geprueft: Projektstarter, Paketstarter, vorbereiteter Starter.
+- GUI-Aktualisierung/Download mit aktuellen Skripthashes und unveraendertem
+  alten Archiv geprueft. Fuer vorhandene Downloads bewusst "Test-Starter
+  aktualisieren", neu herunterladen und in neuen Paketordner entpacken.
+  Alte ZIPs/entpackte Starter nicht nachtraeglich bearbeiten.
+- Nur zwei PowerShell-Vorlagen und Testcode geaendert, kein Python-Backend,
+  kein Serverneustart/Schluesselwechsel/echter Datenbank-Schreibzugriff.
+  Pilot anonym erreichbar/ready,23Webdateien exakt/no-store,keineJS-Fehler;
+  alle20Tabellen/Schema/Daten unveraendert,13Audits/Aktivgeneration0.
+- 295Sourcepins unveraendert. Gesamter aktueller Umfang nur GESAMMELT:
+  3835Faelle/185Module,2739Kern/99Module und1096GUI/86Module. Windows/Linux
+  exaktgleich; KEIN neuer3835erFullrun. Keine reale NX-/Maschinenabnahme.
+
+Dateipaketuebernahme: Pfadgrenzen frueh und einheitlich pruefen (Etappe104)
+- Reproduzierter Linux-Befund: Ein vorhandener relativer Pfad mit241Zeichen
+  wurde als auswaehlbar und uebernehmbar gemeldet. Erst nach Anhangskopie
+  scheiterte das Speichern an der bereits bestehenden240-Zeichen-Grenze;
+  ein unzugeordneter Anhang blieb erhalten. Nur synthetische Testdaten.
+  Native Windows-Originalprobe scheiterte bereits beim Anlegen des langen
+  Testpfads am Betriebssystem; kein vorgetaeuschter nativer Reproduktionsnachweis.
+- Paketmodell, technische API-Vorpruefung und Pfadvalidator teilen dieselbe
+ 1-240-Zeichen-Grenze. Zu lange Bestandsdateien bleiben mit Begruendung
+  sichtbar, aber nicht auswaehlbar. Neue Uebernahmen werden vor Dateibytes,
+  Anhangskopie oder Auftragsannahme abgewiesen. Kein Kuerzen/Umbenennen.
+  Alte Annahmebelege werden weiterhin ohne neue Validierung/Worker wiedergegeben.
+- Neue36Kernfaelle und2GUI-Faelle. Finale gemeinsame Pruefung: Windows
+ 275bestanden/6ausgelassen; Linux alle281bestanden; alle32GUI-Faelle bestanden.
+  Dazu unveraenderte Linux-Originalprobe gruen/keine Anhaenge.314verschiedene
+  qualifizierte Faelle, keine Addition der Plattformen/Teilrunden.
+  Windows-Skips:5physische240-Zeichen-Pfade und1Case-Kollisionsfall;
+  rein lexikalische/API-/Inventargrenzen auch nativ geprueft. Keine OS-Policy
+  geaendert, keine Behauptung nativer Windows-Langpfadfaehigkeit.
+- Alle182installiertenNX2512Profilpfade weiterhin rein lesend zugelassen.
+  293Sourcepins unveraendert. Aktueller Umfang nur gesammelt:3804Faelle/
+ 183Module,2709Kern/98Module und1095GUI/85Module. Windows/Linux exaktgleich;
+  KEIN neuer3804erFullrun. Etappe96 bleibt historische Gesamtbaseline.
+- Lokaler Pilot nach neuer DB-only-Sicherung kontrolliert neu gestartet:
+  backups/package-paths-20261016-87989863a4,7917568Bytes. Alle20Tabellen/
+  Schema/Daten vor/nachNeustart unveraendert,13Audits/Aktivgeneration0.
+  Erreichbarkeit und anonymer Browserstart geprueft:23Webdateien exakt/
+  no-store,ready/idle,0privateAPIcalls/JS-Fehler. Neuester Sitzungsschluessel
+  im neuesten Serverfenster; fruehere Schluessel nicht mehr verwenden.
+  Kein Zugriff auf das Produktivverzeichnis oder vorhandene Grossarchive.
+- Betrifft Dateipakete, nicht die Pfadregeln des vollstaendigen NX-Updates.
+  Absolute Windows-Pfadgrenzen und reale NX-Kompatibilitaet bleiben separat.
+
+NX-Oberflaechenprofile: Formatluecke behoben (Etappe103)
+- Neuer lokaler Metadatenabgleich: 182 Profil-Dateien in NX2512, verteilt auf
+  neun zuvor nicht unterstuetzte Typen: ddb/rtb/grb/gly/csb/abr/stb/dtx/crb.
+  Nun fuer UI-Standards unter UGII/menus/profiles/ zugelassen, nicht in den
+  anderen Paketwurzeln. Uploadauswahl und Bestandsanzeige ergaenzt.
+- Profilbytes bleiben unveraendert. Technische Pruefung bindet Bytes/Hashes,
+  bestaetigt aber keine Abhaengigkeiten oder NX-Laufzeitkompatibilitaet.
+  Vier ausdrueckliche Paketchecks bleiben Voraussetzung fuer approved.
+  Fehlende Baseline und unveraenderter Siemens-Standard begruenden keinen
+  Kundenbesitz; Uebernahme bleibt ein eigener gepruefter Entwurfsschritt.
+- Nachgewiesen: 278 Windows-Kernfaelle bestanden; Linux 277 bestanden,
+  1 Windows-Kindprozessfall ausgelassen. 98 verschiedene GUI-Faelle ueber
+  dokumentierte Runden bestanden; dazu neun unveraenderte Originalproben.
+  Zusammen 385 verschiedene qualifizierte Faelle, keine Addition von Duplikaten.
+  Der gemeinsame GUI-Lauf war NICHT durchgaengig gruen: 96 bestanden,
+  ein inzwischen korrigierter neuer Testablauf und ein Setup-Ladefehler bei
+  geometry.js (network_failure, keine JS-Laufzeitfehler). Ursache des einmaligen
+  Ladefehlers nicht bewiesen. Separate Vierer-Runde und zusaetzliche unabhaengige
+  Wiederholung dieses Startfalls bestanden; Startkontrolle nicht abgeschwaecht.
+- Gesamter aktueller Umfang nur gesammelt: 3766 Faelle/181 Module;
+  2673 Kernfaelle/97 Module und 1093 GUI-Faelle/84 Module. Windows/Linux exakt
+  gleich, aber KEIN neuer vollstaendiger 3766er-Lauf. 291 Sourcepins erhalten.
+- Lokaler Pilot nach neuer DB-only-Sicherung kontrolliert neu gestartet:
+  backups/ui-profiles-20261016-a51a1f0bca, 7917568 Bytes. Alle 20 Tabellen,
+  Schema und Daten vor/nach Neustart unveraendert, weiterhin 13 Audits und
+  Aktivgeneration0. Keine Produktivfreigabe, kein Grossarchivzugriff.
+  Neuer Sitzungsschluessel im neuen Serverfenster; alte Sitzung nicht verwenden.
+  Erreichbarkeit und anonymer Browserstart danach geprueft: 23 Webdateien
+  exakt/no-store, ready/idle, keine privaten API-Aufrufe oder JS-Fehler.
+- Keine firmenweite Clientverteilung/Durchsetzung einer einheitlichen NX-UI.
+  Reale Rollen-/Profilpruefung in NX bleibt separat, kein NX-Code ausgefuehrt.
+
+Datenumfang und reale FORMAT-Definitionen geprueft (Etappe102)
+- 23 Stammdatentypen: 20 mit nativen NX-Bibliotheken, insgesamt 41 Adapter.
+  Vorlagen/UI-Standards sind Dateipakete; allgemeine Pruefmittel sind reine
+  Katalogdaten. Maschinen/Spannmittel koennen zusaetzlich Dateipakete haben.
+  Ein allgemeines Pruefmittel wird auch bei Status approved nicht als neue
+  NX-Bibliothek exportiert. CMM-Taster besitzen eigene native Adapter.
+- Alle 41 installierten NX2512-DAT-Dateien nur lesend geprueft: 2275992 Bytes,
+  241 FORMAT-Definitionen. Repraesentative vorhandene Objektgruppen decken
+  152 Formate ab und bestehen den Struktur-/CAM-Datenvertrag; 89 weitere
+  Definitionen enthalten keine Beispielzeilen. Keine CAD-/EXE-/DLL-Ausfuehrung.
+- Zusaetzlicher isolierter GUI-Prueffall erstellt aus ALLEN 241 echten
+  FORMAT-Definitionen je einen Entwurf. Nur Spaltennamen/Klassen kopiert,
+  synthetische Kennungen, andere Felder leer, keine CAM-Freigabe/Dateiausgabe.
+  Auch alle 89 Formate ohne Beispiele bestanden. Original-DAT-Hashes erhalten.
+  Das sind 241 Ablaeufe in EINEM zusaetzlichen Test, nicht 241 Einzeltests.
+- Editor erklaert jetzt die Grenze zwischen Katalogdaten, nativen CMM-Tastern
+  und Dateipaketen. Hinweis ist an Typ/CAM-Status barrierefrei angebunden.
+  Neuer GUI-Test bestaetigt Speichern plus echte Nur-Stammdaten-Exportvorschau.
+- Gezielt qualifiziert: 3 Strukturfaelle je Windows/Linux, 17 GUI-Faelle und
+  1 zusaetzlicher Echt-FORMAT-Prueffall; 21 verschiedene Faelle, keine Fehler.
+  Keine echte Geometrie-, Schnittwert-, Maschinen- oder Produktionsabnahme.
+- Aktueller Testumfang nur GESAMMELT, nicht neu vollstaendig ausgefuehrt:
+  3681 Faelle/179 Module, davon 2590 Kernfaelle/96 Module und 1091 GUI-Faelle/
+  83 Module. Windows/Linux haben exakt dieselben Kennungen und Modulzahlen.
+  Gesamtbaseline Etappe96 und neue gezielte Nachweise bleiben getrennt.
+- Kein Python-Backend geaendert, kein Neustart und keine echte DB-Mutation.
+  Lokaler Pilot liefert aktuellen Hinweis; Browser neu laden, vorhandenen
+  Sitzungsschluessel weiterverwenden. Kein Zugriff auf das Produktivlaufwerk.
+
+Eindeutige Dateientscheidungen im Versionsupdate (Etappe101)
+- Behoben: Zwei Schreibweisen desselben Dateipfads konnten zuvor getrennte,
+  sogar widerspruechliche Entscheidungen enthalten. Der Planer nahm still
+  den letzten Wert und meldete den Plan als baubar. Drei Originalproben
+  reproduzierten dies ohne Zielordner-Erstellung oder Zugriff auf echte Daten.
+- Neue Auftraege verwerfen doppelte logische Pfade vor Quellzugriff und
+  Auftragsannahme. Keine automatische Auswahl oder Zusammenfassung. Alte
+  Annahmebelege bleiben unveraendert und werden nicht erneut ausgefuehrt.
+- GUI sperrt mehrdeutige Rohdaten, erhaelt den Text und erlaubt Korrektur.
+  Eine einzelne abweichende Gross-/Kleinschreibung bleibt gueltig; das
+  Auswahlfeld bearbeitet/entfernt deren vorhandenen Schluessel, ohne einen
+  zweiten anzulegen. Der Server prueft zusaetzlich seine Unicode-casefold-
+  Identitaet; eine API-Ablehnung hinterlaesst keinen haengenden Browserversuch.
+- Finale Nachpruefung: Windows 151 bestanden/1 OS-Symlinktest ausgelassen;
+  Linux alle 152 bestanden; 53 GUI-Faelle bestanden; 3 Originalproben gruen.
+  208 unterschiedliche qualifizierte Faelle ueber beide Plattformen, keine
+  Addition wiederholter Runden. Linux ersetzt keine native Windows-Symlinkabnahme.
+- Lokaler Pilot nach Tests kontrolliert neu gestartet und erreichbar.
+  Neue DB-only-Sicherung: backups/file-choices-20261016-c230a2731c,
+  7917568 Bytes. Alle 20 Tabellen/Schema/Daten vor und nach Neustart gleich,
+  weiterhin 13 Audits, Aktivgeneration0 und 3 alte blocked/failed-Datenstaende.
+  Bestehende Sicherungsarchive nicht geoeffnet, keine fachliche Freigabe.
+  Zum Verbinden den neuen Sitzungsschluessel aus dem neuen lokalen Fenster
+  verwenden. Der Schluessel wurde nicht ausgelesen oder protokolliert.
+- 289 Quell-/Testpins nach Tests/Rollout unveraendert. Seit Etappe100 nur
+  migration.py, upgrades.py und web/upgrades.js geaendert plus zwei neue Tests.
+  Die breite Etappe96 bleibt historische Gesamtbaseline, kein neuer Fullrun.
+
+Collector-Korrektur und gemeinsame Nachpruefung (Etappe100)
+- Neu erzeugte Ergebnis-Collector pruefen das vollstaendige kompakte UTF-8-
+  Manifest vor der ZIP-Erstellung auf maximal 2 MiB. Kein unbrauchbares ZIP
+  bei Ueberschreitung, keine still gekuerzte Koerper-/Objektliste. Originale
+  PRT-/DAT-Dateien und ein bereits vorhandenes Ergebnisarchiv bleiben erhalten.
+- Originalbefund mit 2322446 Manifestbytes reproduziert; unveraenderte Probe
+  besteht nach Korrektur mit konkretem Abbruch und ohne Ergebnis-ZIP.
+- Gemeinsamer Abschlusslauf fuer beide Korrekturen: 243 Windows-Kernfaelle
+  bestanden; Linux 225 bestanden/18 Windows-spezifische ausgelassen; 8 GUI-
+  Faelle bestanden. Dazu 4 verschiedene Originalproben. Insgesamt 255
+  unterschiedliche qualifizierte Faelle, keine Doppelzaehlung der Teilrunden.
+  GUI umfasst neuen Collector-Download sowie Ergebnisupload/Vorschau/
+  Entwurfsuebernahme, ausschliesslich mit isolierten synthetischen Daten.
+- 287 Quell-/Testpins nach den Abschlussrunden unveraendert. Gegen die
+  Gesamtbaseline sind zwei Anwendungsdateien und ein GUI-Test geaendert;
+  drei neue Testdateien kommen seit Etappe98 hinzu. Andere 281 Pins erhalten.
+  Keine Behauptung eines neuen Gesamtlaufs; Etappe96 bleibt historische Baseline.
+- Korrekturen gelten fuer NEUE Auftraege/Collector-Snapshots. Bestehende Pakete
+  und Hashes bleiben unveraendert. Kein Serverneustart/keine DB-Migration.
+
+Weitere Diagnosekorrektur (Etappe99)
+- Neu erzeugte STEP-Journale begrenzen Teile auf 5000 und Koerper je Teil
+  auf 10000. Die gesamte kompakte UTF-8-Berichtsdatei bleibt innerhalb der
+  1-MiB-Grenze von GUI und API, einschliesslich Fehlermeldungen.
+- Ueberschreitungen ergeben einen uploadbaren failed-Teilbericht. Keine
+  still vollstaendige Koerperliste, keine gekuerzte Geometrie, keine Freigabe.
+  Lange/zu viele Meldungen werden ausdruecklich begrenzt; Identitaet und
+  Originaldateien bleiben erhalten. Keine Aenderung am Serververtrag.
+- Originalproben fuer 5001 Teile, 10001 Koerper und grosse Unicode-Namen:
+  vorher drei Fehler, danach dreimal failed/HTTP200, Ressource weiter draft.
+- Finale Nachpruefung: 235 Windows-Kernfaelle bestanden; unter Linux
+  217 bestanden/18 Windows-spezifische ausgelassen; 6 GUI-Faelle und die
+  3 unveraenderten Originalproben bestanden. 244 verschiedene Faelle,
+  keine Addition der wiederholten Linux-/ersten Teilrunden.
+- Der dabei entdeckte Collector-Folgebefund ist in Etappe100 behoben und
+  separat sowie im gemeinsamen Abschlusslauf nachgewiesen, siehe oben.
+
+Behobener Befund aus ergaenzender Nachpruefung (Etappe97/98)
+- Synthetisch reproduziert: Das lokale STEP-Importjournal kann mehr als
+  10000Komponenten in einen Diagnosebericht aufnehmen. Der Server lehnt
+  diesen Bericht anschliessend wegen seiner Komponentenobergrenze ab.
+- Behoben fuer neu erzeugte STEP-Journale: maximal10000Komponenten und
+  500Zeichen Komponenten-ID. Abbruch VOR weitererPrototypabfrage, erhaltener
+  fehlgeschlagenerTeilbericht, Upload moeglich, keineCAM-Freigabe.
+- Originalprobe mit10001Komponenten jetzt bestanden:10000imTeilbericht,
+  Statusfailed/HTTP200. AlteJobpakete undHashes bleiben unveraendert;
+  fuer dieKorrektur einen NEUEN Auftrag erstellen, alteZIPs nicht veraendern.
+- Betrifft M05, nicht den NX2406->NX2512-Migrationsteil. Nachpruefung:
+  206Windows-Kernfaelle bestanden; Linux188bestanden/18Windowsfaelle
+  ausgelassen;3GUIfaelle plus1Originalprobe bestanden. Zusammen210
+  verschiedenequalifizierteFaelle, keineAddition derwiederholtenTeilrunden.
+- Etappe96 bleibt dievollstaendigeBaseline vor dieserKorrektur. Deraktuelle
+  Quelldiff hat eigenegezielteNachweise, keinenbehaupteten neuenGesamtlauf.
+
+Was jetzt zur Verfuegung steht
+- Lokaler Windows-Pilot unter http://127.0.0.1:8765.
+  Der Dienst ist damit noch kein abgenommener Docker-/SMB-Server.
+- Drei getrennte Arbeitsbereiche: Stammdaten verwalten, Stammdaten anlegen
+  und aufbereiten, Versionsupdate. NX liest weiterhin einen normalen Ordner.
+- Aenderungen an Stammdaten erzeugen Revisionen. Erst ein ausdruecklicher
+  Export erstellt daraus einen neuen NX-Datenstand; Speichern allein
+  aendert keinen bereits vorhandenen NX-Ordner.
+
+Anforderungen und konkrete Pruefgrundlage
+M01 Versionsupdate / Erstimport
+    UI: Upgrade-Wizard, Quell-/Zielauswahl, Voraussetzungen, Vorschau,
+    Konflikt-/Spaltenentscheidungen, Build, Auftragsbericht, Test-Starter.
+    Code: upgrades.py, migration.py, sidt_version.py, migration_requests.py,
+    installation_version.py, testlaunch.py.
+    Tests: test_upgrades.py, test_upgrade_*browser.py, test_full_library_upgrade*py,
+    test_format_upgrade_matrix*py, test_sidt_version*py,
+    test_release_jobs.py, test_launcher_refresh_browser.py.
+    Grenze: implementierter Adapter derzeit NX2406 -> NX2512. Eine EXE allein
+    ersetzt nicht die alten/neuen vollstaendigen Siemens-/SIDT-Referenzen.
+
+M02 Stammdaten / native Datenbanken / ERP-Zuordnung
+    UI: Bestandssuche, 41 Bibliotheken, ganze Objektgruppen uebernehmen oder
+    als neue Entwuerfe ableiten, native Felder, Schemata, Referenzen, Historie.
+    Code: libraries.py, schemas.py, cloning.py, editorrefs.py, history.py,
+    schemaimpact.py, erp_catalog.py, erp_variants.py.
+    Tests: test_libraries.py, test_catalog_*py, test_native_*py,
+    test_schema*py, test_erp_*py, test_all_library_creation_browser.py.
+    Umfang: 23 Stammdatentypen; 41 native Bibliotheksadapter. Neue FORMAT-
+    Spalten bleiben erhalten bzw. verlangen ausdrueckliche Entscheidungen.
+    Ein ERP-Artikel kann optional mehrere getrennte CAM-Varianten haben;
+    Modellumstellung nur ausdruecklich mit Sicherung, keine Liveverbindung.
+    Aktueller Datenabgleich: alle 241 originalen NX2512-FORMAT-Definitionen
+    lassen sich in isolierten GUI-Ablaeufen als unqualifizierte Entwuerfe
+    verwenden. Allgemeine Pruefmittel haben keinen nativen NX-Exportadapter.
+
+M03 Anhaenge / Maschinen- und Spannmittelpakete / Graphics
+    UI: Upload, vorhandene Anhaenge, Download, PRT-Pfade, Dateipaketeditor,
+    Bestandsuebernahme und technische Vorpruefung.
+    Code: api.py, asset_requests.py, graphics.py, filepackages.py.
+    Tests: test_assets.py, test_asset_*py, test_filepackage*py,
+    test_package_*py, test_graphics_bindings*py.
+    Grenze: Datei-/Hash-/Pfadbeleg ist keine CAM-Geometriequalifizierung.
+    Maschinenmetadaten erzeugen kein funktionsfaehiges Maschinenmodell,
+    keinen Postprozessor und keine automatisch gueltige Simulation.
+
+M04 NX-Protokolle / Abnahme / lokale Aktivierung
+    UI: technische Pruefung, aktuelle und historische Befunde, Logupload,
+    sechs ausdrueckliche fachliche Pruefungen, Freigabe und Belegklaerung.
+    Code: syslogs.py, log_requests.py, release_requests.py, store.py.
+    Tests: test_review*py, test_syslogs.py, test_release_validation*py.
+    Grenze: Historische Befunde sind keine heutige Neupruefung.
+    Aktivieren aendert nur den lokalen Verwaltungszeiger, keine SMB-Freigabe
+    und keine laufende NX-Sitzung.
+
+M05 STEP / Tool Assistant
+    UI: STEP-Vorpruefung, Auftraege, lokales NX-Journalpaket, Diagnose- und
+    Komponenten-Ergebnisrueckimport, Entwurfsuebernahme.
+    Code: geometry.py, nxworker.py, results.py, resultworker.py.
+    Tests: test_geometry*py, test_results*py, test_result_*py,
+    test_worker_*py, test_collector_bootstrap.py.
+    Grenze: Kein NX im Server gestartet. Reales STEP-/NX-Assistant-Beispiel
+    und fachliche Geometrieabnahme wie vom Benutzer gewuenscht erst spaeter.
+    Nachpruefung: lokale NX2512-Pythonstubs nur alsText/AST gelesen, keine
+    Siemens-DLLs importiert. 86von87ausgewaehlten API-/Enummerkmalen sind
+    dort nachweisbar; diePython-Iteration ueber Parts ist imStub nicht
+    deklariert und damit statisch nicht verifiziert, keinbewiesenerAPIfehler.
+    Komponenten-/IDtiefengrenze inEtappe98 gezielt abgesichert; realeNX-
+    Ausfuehrung undGeometriepruefung bleiben wievereinbart offen.
+    Teile-/Koerper-/Berichtsbytes und Collector-Manifestgroesse in Etappe99/100
+    gezielt abgesichert. Keine automatische CAM-Freigabe oder echte NX-Ausfuehrung.
+
+M06 Oberflaeche / API / Wiederanlauf
+    UI: Reiter, konsistenter Bestand, erhaltene Eingaben, explizite Saves,
+    Auftraege und Belegklaerung nach unklarer Antwort oder Reload.
+    Code: web/*.js, web/index.html, api.py, store.py, write_requests.py.
+    Tests: derzeit 95 Browser-Testmodule plus Bootstrap-/Wire-/Requesttests,
+    einschliesslich test_upgrade_decision_context_browser.py und
+    test_export_decision_context_browser.py.
+    Grenze: Testabdeckung muss am aktuellen Quellstand nachgewiesen werden;
+    fruehere gruene Teilrunden beweisen keinen heutigen Gesamtdurchlauf.
+
+M07 Integritaet / Sicherung / Betrieb
+    UI: Aenderungsprotokoll, Integritaetspruefung, verwaltete Sicherung,
+    Pruefung und Wiederherstellung in einen NEUEN isolierten Bestand.
+    Code: auditview.py, integrity.py, backups.py, backup_requests.py;
+    Dockerfile, Compose-Profile und Windows-Dockerstarter.
+    Tests: test_auditview*py, test_integrity*py, test_backup*py,
+    test_docker_*py, test_container.py.
+    Grenze: Docker-Policytests mit CLI-Ersatz sind kein echter Enginenachweis.
+    SMB-Publikation/ACLs, Offsite, Signaturen und Betriebsabnahme sind offen.
+    Pruefsummen erkennen Aenderungen, verhindern sie aber nicht allein.
+
+M08 Firmenvorlagen / gleiche NX-Oberflaeche
+    UI: versionierte Vorlagen-/UI-Pakete, exportierte MTX-Rolle fuer einen
+    expliziten Test-Starter; getrennte qualifizierte Paketrevisionen.
+    Code: filepackages.py, launchprofiles.py, template_refs.py,
+    testlaunch_assets/NXUIProfile.psm1 und weitere Starterhelfer.
+    Tests: test_launchprofiles*py, test_template*py, test_filepackages*py.
+    Etappe103: Neun zusaetzliche Profildatentypen im vorgesehenen Profilbaum;
+    test_ui_profile_files*py prueft Upload/Besitz/Export/Stilllegung und GUI.
+    Grenze: Noch keine firmenweite Clientverteilung oder Durchsetzung von
+    Customer Defaults/Benutzerprofilen. Makro-/Reuse-/Postpakete und reale
+    Rollen-/Vorlagenpruefung sind nicht allein durch Dateikopien abgenommen.
+
+Automatisierte Gesamtbaseline (Etappe96) und gezielte Nachpruefungen (Etappe98-114)
+- Etappe95 abgeschlossen: 64 unterschiedliche Browserfaelle bestanden,
+  241 Kernfaelle je Windows/Linux bestanden. Siehe Entwicklungsprotokoll.
+- Etappe96: 174 Testmodule mit 3593 gesammelten Faellen.
+  2513 Kernfaelle sowie 1080 Browserfaelle in zwei getrennten 540er-Gruppen.
+  Alle vier Originalrunden beendet; OriginalJUnit vollstaendig ausgewertet.
+  Windows gesamt: 3585 bestanden, 8 ausgelassen, keine Fehler. Alle174
+  Module und3593eindeutigen Fallkennungen entsprechen exakt dem Pruefplan.
+  Dies ist ein automatisierter Nachweis, keine reale CAM-/Produktivabnahme.
+- Vollstaendiger Linux-Kernlauf abgeschlossen: 2276 bestanden, keine Fehler,
+  237 ausgelassen (232 Windows-abhaengige, 5 explizit optionale Pruefungen).
+  OriginalJUnit: 2513 eindeutige Faelle in genau den92geplanten Modulen,
+  alle Modulfallzahlen stimmen mit dem gesammelten Pruefplan ueberein.
+- Vollstaendiger Windows-Kernlauf abgeschlossen: 2506 bestanden, keine
+  Fehler, 7 ausgelassen. Davon5Opt-ins (Engine/Compose/echteExtraktion),
+  einSymlinkfall ohneBerechtigung und einphysischerCase-Kollisionsfall,
+  der ein case-sensitives Dateisystem verlangt. Keine Rechte veraendert.
+  OriginalJUnit: dieselben2513eindeutigen Kennungen/92Modulfallzahlen.
+- Beide Kernberichte gemeinsam geprueft: 2508unterschiedliche Kernfaelle
+  tatsaechlich bestanden; nur die5Opt-ins aufbeidenPlattformen ungetestet.
+  Die beiden Windows-Dateisystemauslassungen bestanden unterLinux. Das
+  ersetzt keinen nativenWindows-Symlink-/case-sensitiven Dateisystemnachweis.
+- Browsergruppe1: 539 bestanden, 1deaktivierterGUI-Opt-in mit echten
+  Installationspaketen ausgelassen. Browsergruppe2: alle540bestanden.
+  Beide enthalten exakt41Module/540eindeutigeFaelle, zusammen1080ohne
+  Doppelzaehlung. Keine Failures/Errors in den Originalberichten.
+- Plattformuebergreifend3587unterschiedlicheBaselinefaelle tatsaechlich
+  bestanden;6expliziteOpt-ins unausgefuehrt (5Kernfaelle plus1GUI-Extraktion).
+  Die2separatenZusatzproben (16Schemaablaeufe und205Klickhandler) sind
+  darin NICHT als weitereBaselinefaelle oder205einzelneTests gezaehlt.
+- Separater PowerShell-Migrationstest bestanden: neuer synthetischer
+  Dreiwege-Build, neue Zielspalte, Kundendatensatz, ausgelassene optionale
+  DMG-Palette und erwartete Ablehnung geschuetzter/ueberlappender Pfade.
+  Echte NX-Daten und Produktivpfade wurden dabei nicht geoeffnet.
+- Separate lesende UI-Strukturprobe bestanden: alle205im geladenen DOM
+  vorhandenen ID-Schaltflaechen haben einen direkten Klick-Handler;
+  kein Audit-/Stammdatenwrite durch die Inventur. Eine pytestPruefung,
+  keine205Funktionstests. Dynamische Zeilenaktionen und das Verhalten der
+  Handler wurden zusaetzlich in den grossen Browserlaeufen geprueft.
+- Echte Installer-/Engine-/Compose-Opt-ins sind deaktiviert; ausgelassene
+  bzw. plattformgebundene Tests sind oben separat ausgewiesen.
+- Beim Abschluss der Etappe96 waren alle 284 festgehaltenen Dateien unveraendert.
+  Aktueller Vergleich nachEtappe114:25dieserDateien gezielt geaendert;
+  33Anwendungs-/Test-/Hilfsdateien kamen hinzu,317Pins zusammen stabil.
+  Die gezielten Nachweise sind oben nach Etappe98-114 getrennt aufgefuehrt.
+  Die Gesamtbaseline wird nicht stillschweigend als neuer Gesamtlauf ausgegeben.
+  AnonymerPilotcheck:23Webdateien bytegleich/no-store,
+  Oberflaeche ready/idle,0Browserfehler/0privateAPI-Aufrufe. Neuester gesicherter
+  Neustart inEtappe114; Sitzungsschluessel ausschliesslich im neuen Serverfenster.
+  KeinZugriffauf echtenAdministrationsschluessel oderBenutzerbrowserprofil.
+- Quellfingerprints, Testaufteilung und Berichte liegen im eigens erzeugten
+  C:\Users\Jan\AppData\Local\Temp\nx-et96-MKqPpg3i.
+  Die Fingerprints dienen dem Teststandsvergleich, nicht der CAM-Abnahme.
+
+Zusaetzlicher Strukturabgleich der lokalen Siemens-Standarddaten
+- Nur lesend, ohne Store/Modelle/Kundendaten: 80 vorhandene DAT-Dateien aus
+  C:\Siemens\NX2406 und C:\Siemens\NX2512, zusammen 4526915 Bytes.
+- NX2512: alle41Adapterpfade vorhanden; 241FORMAT-Bloecke vom begrenzten
+  Schema-Leser verarbeitbar. NX2406:39Dateien/235Bloecke verarbeitbar;
+  die beiden Fixture-Automation-Datenbanken fehlen in DIESER lokalen
+  NX2406-Installation an den bekannten Pfaden. Kein Parserfehler daraus.
+- Echte Aenderungsbeispiele: STYPE in metrischen MILLING_DRILLING-Haltern,
+  DROT in drei vorhandenen Werkzeugklassen, FD in TANGENT_BARREL_MILL und
+  die zusaetzliche Klasse FRONT_BACK_CHAMFER_MILL (75 -> 76 Werkzeugbloecke).
+  Zwei englische Halterbibliotheken haben Layoutunterschiede ohne neue
+  bzw. entfernte Feldnamen. Keine Vorgabewerte oder Zuordnungen erfunden.
+- stock-schema-audit.json im obigen Evidenzordner enthaelt ausschliesslich
+  Strukturzaehler/Hashes und Feldnamenunterschiede, keine Objektwerte.
+- Anschliessender separater GUI-Test bestanden: 16 synthetische Entwuerfe
+  aus den Original-FORMATdefinitionen, neue Felder ueber die Oberflaeche
+  gespeichert, darunter neue Werkzeugklasse und alle3STYPE-Sektionen der
+  metrischen CAM-/CMM-Halter. Eine pytestPruefung umfasst diese16Ablaeufe.
+  Originaldateien nachher hashgleich; keine Geometriefreigabe/Exporte.
+  Diese Stichproben ersetzen keinen vollstaendigen Test aller Klassen,
+  keinen Export-/NX-Nachweis oder kundenspezifischen Ordnervergleich.
+
+Sichere naechste Schritte
+1. Fuer den Benutzer den Kernablauf anhand TEST_CHECKLISTE.txt erproben:
+   lokale alte Kopie -> neuer NX2512-Ordner -> Test-Starter -> NX-Pruefung.
+   Der reale STEP-/Tool-Assistant-Test bleibt wie vereinbart ein spaeterer
+   eigener Schritt. Es wird jetzt keine STEP-Datei vom Benutzer verlangt.
+2. Reale Befunde aus diesem Test gezielt nachstellen und bearbeiten;
+   geplante Liveadapter nicht ohne eigenen Auftrag verbinden.
+3. Tatsachen, Befunde und offene Abnahmen getrennt dokumentieren. Keine
+   Freigabe/SMB-Umschaltung oder ERP-Modellumstellung automatisch ausfuehren.
+
+Nicht in dieser Erprobung enthalten
+- W:\SiemensShare\nx2406, W:, UNC-/Produktivpfade bleiben unberuehrt.
+- Kein echtes Backup-Grossarchiv lesen oder neu packen, kein echter
+  Administrationsschluessel oder Benutzer-Browserprofil fuer die Tests.
+- Business Central, Cloud Tool Manager/Cloud Connector, Sinumerik Integrate,
+  MMP und KI-Gateway bleiben geplante Adapter; keine Liveanbindung.
+- Kein automatischer Git-Commit/Push und keine Produktivbereitstellung.
+
+Details: README_NX_Migration.md
+Praxistest: TEST_CHECKLISTE.txt
+Vollstaendiges Entwicklungs-/Fehlerprotokoll: DEVELOPMENT_PROGRESS.txt

@@ -12,26 +12,111 @@ import stat
 import sys
 from pathlib import Path
 
+WORKER_FILES=('nx_step_import.py','nx_safety.py','stepfiles.py')
+MAX_JOB_BYTES=32*1024*1024  # CAM snapshot plus metadata; API requests are capped at 30 MiB.
+MAX_HELPER_BYTES=1024*1024
+MAX_STEP_BYTES=20*1024*1024
+MAX_REPORT_FILES=10000
+# Keep standalone journal diagnostics within the server's Report contract.
+MAX_REPORT_COMPONENTS=10000
+MAX_COMPONENT_ID_LENGTH=500
+MAX_REPORT_PARTS=5000
+MAX_PART_BODIES=10000
+MAX_REPORT_BYTES=1024*1024
+MAX_REPORT_MESSAGES=10000
+MAX_MESSAGE_LENGTH=16000
+
+
+def _report_json(value):
+    # Match the server's canonical UTF-8 size, including non-ASCII names.
+    # Pretty-printing can make an otherwise valid report too large for the GUI.
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+
+
+class _ReportBudget:
+    """Account for growing metadata without repeatedly serializing the inventory."""
+    def __init__(self, report):
+        self.report = report
+        self.size = len(_report_json(report).encode('utf-8'))
+
+    def append(self, field, value):
+        cost = len(_report_json(value).encode('utf-8')) + bool(self.report[field])
+        if self.size + cost > MAX_REPORT_BYTES:
+            raise DomainError('Diagnostic byte budget exceeded; only a partial ' + field + ' inventory is recorded.')
+        self.report[field].append(value)
+        self.size += cost
+
+
+def _diagnostic_message(value):
+    text = str(value).replace('\x00', '\\0')
+    suffix = ' [diagnostic text truncated]'
+    if len(text) > MAX_MESSAGE_LENGTH:
+        text = text[:MAX_MESSAGE_LENGTH-len(suffix)] + suffix
+    return text
+
+
+def _bounded_report_text(report):
+    """Keep failed evidence uploadable; never silently qualify a partial report.
+
+    Incremental inventory accounting leaves only summary/error overhead here.
+    If that overhead crosses the limit, retain prefixes of the metadata arrays,
+    not modified geometry. Binary search avoids quadratic full-report encoding.
+    """
+    changed = False
+    for field in ('errors', 'warnings'):
+        original = report[field]
+        report[field] = [_diagnostic_message(value) for value in original[:MAX_REPORT_MESSAGES]]
+        changed |= report[field] != original
+    if changed:
+        report['status'] = 'failed'
+        report['errors'] = ['Diagnostic messages exceed text/count bounds; only partial diagnostic text is recorded.'] + report['errors'][:MAX_REPORT_MESSAGES-1]
+    text = _report_json(report)
+    if len(text.encode('utf-8')) <= MAX_REPORT_BYTES:
+        return text
+    report['status'] = 'failed'
+    report['errors'] = ['Diagnostic byte budget exceeded; only a partial diagnostic inventory is recorded.'] + report['errors'][:MAX_REPORT_MESSAGES-1]
+    for field in ('solid_prototypes', 'body_prototypes', 'component_occurrences'):
+        report.pop(field, None)
+    fields = ['parts', 'components', 'files', 'warnings', 'errors']
+    while True:
+        text = _report_json(report)
+        if len(text.encode('utf-8')) <= MAX_REPORT_BYTES:
+            return text
+        candidates = [field for field in fields if len(report[field]) > (1 if field == 'errors' else 0)]
+        if not candidates:
+            raise DomainError('Diagnostic identity alone exceeds the report byte budget.')
+        field = max(candidates, key=lambda key: len(_report_json(report[key]).encode('utf-8')))
+        values = report[field]
+        low, high = (1 if field == 'errors' else 0), len(values)
+        while low < high:
+            middle = (low + high + 1) // 2
+            report[field] = values[:middle]
+            if len(_report_json(report).encode('utf-8')) <= MAX_REPORT_BYTES:
+                low = middle
+            else:
+                high = middle - 1
+        report[field] = values[:low]
+
+
+if '_nx_verified_helper_modules' not in globals():
+    from .nxbootstrap import _nx_verified_helper_modules
+
+
+def _verified_helpers(value):
+    """Compile pinned bytes, not ambient imports or cached pyc; no NX calls."""
+    modules=_nx_verified_helper_modules(value,'job.json','worker_hashes',WORKER_FILES,
+        (('safety','nx_safety.py'),('stepfiles','stepfiles.py')),max_job_bytes=MAX_JOB_BYTES,max_helper_bytes=MAX_HELPER_BYTES)
+    return modules['safety'],modules['stepfiles']
+
+
 try:
-    from .safety import DomainError, offline_path, tree_files
+    from .safety import DomainError, offline_path, tree_files,read_bounded_file,file_fingerprint
     from .stepfiles import PROTOCOLS, TOOL_TYPES, preflight
 except ImportError:
-    # NX Journal Play does not consistently add the journal directory to
-    # sys.path. Check the local package location before loading its helpers.
-    package = Path(__file__).absolute().parent
-    if os.name != 'nt' or not package.as_posix().casefold().startswith('c:/nx_migration/tooljobs/'):
-        raise RuntimeError('Unpack this NX journal package below C:\\NX_Migration\\ToolJobs.')
-    for item in reversed([package] + list(package.parents)):
-        attributes = item.lstat()
-        if stat.S_ISLNK(attributes.st_mode) or getattr(attributes, 'st_file_attributes', 0) & 0x400:
-            raise RuntimeError('NX job package directory may not contain links or junctions.')
-    for name in ('nx_safety.py', 'stepfiles.py'):
-        attributes = (package / name).lstat()
-        if not stat.S_ISREG(attributes.st_mode) or getattr(attributes, 'st_file_attributes', 0) & 0x400:
-            raise RuntimeError('NX journal helpers must be ordinary local files.')
-    sys.path.insert(0, str(package))
-    from nx_safety import DomainError, offline_path, tree_files
-    from stepfiles import PROTOCOLS, TOOL_TYPES, preflight
+    _safety,_step=_verified_helpers(Path(__file__).absolute().parent)
+    DomainError,offline_path,tree_files,read_bounded_file=(_safety.DomainError,_safety.offline_path,_safety.tree_files,_safety.read_bounded_file)
+    file_fingerprint=_safety.file_fingerprint
+    PROTOCOLS,TOOL_TYPES,preflight=_step.PROTOCOLS,_step.TOOL_TYPES,_step.preflight
 
 
 def check_environment(session):
@@ -81,9 +166,13 @@ def inventory_part(part, output):
         relative = path.relative_to(output).as_posix()
     except ValueError as error:
         raise DomainError('NX loaded a component outside the isolated output directory.') from error
-    bodies = [{'id': b.JournalIdentifier, 'name': b.Name, 'solid': bool(b.IsSolidBody),
-               'convergent': bool(b.IsConvergentBody), 'face_count': len(b.GetFaces()),
-               'layer': b.Layer, 'color': b.Color} for b in part.Bodies]
+    bodies = []
+    for b in part.Bodies:
+        if len(bodies) >= MAX_PART_BODIES:
+            raise DomainError('Body count exceeds diagnostic bounds; only a partial part inventory is recorded.')
+        bodies.append({'id': b.JournalIdentifier, 'name': b.Name, 'solid': bool(b.IsSolidBody),
+                       'convergent': bool(b.IsConvergentBody), 'face_count': len(b.GetFaces()),
+                       'layer': b.Layer, 'color': b.Color})
     return {'path': relative, 'units': str(part.PartUnits),
             'fully_loaded': bool(part.IsFullyLoaded), 'bodies': bodies}
 
@@ -127,7 +216,7 @@ def local_settings(settings, output):
 
 def run_job(directory, session, nx):
     directory = job_directory(directory)
-    job = json.loads(offline_path(directory / 'job.json').read_text(encoding='utf-8'))
+    job = json.loads(read_bounded_file(directory/'job.json',max_bytes=MAX_JOB_BYTES).decode('utf-8-sig'))
     if job.get('contract_version') != 1 or job.get('nx_version') != '2512' or job.get('tool_type') not in TOOL_TYPES:
         raise DomainError('Unsupported NX job contract.')
     # The package is pinned to these exact helper sources, not current server code.
@@ -136,15 +225,16 @@ def run_job(directory, session, nx):
     for filename, expected in job['worker_hashes'].items():
         if filename not in {'nx_step_import.py', 'nx_safety.py', 'stepfiles.py'}:
             raise DomainError('Invalid worker file.')
-        if hashlib.sha256(offline_path(directory / filename).read_bytes()).hexdigest() != expected:
-            raise DomainError('Worker package changed: ' + filename)
+        read_bounded_file(directory/filename,max_bytes=MAX_HELPER_BYTES,expected_sha256=expected,
+            changed_message='Worker package changed: '+filename)
     source = offline_path(directory / 'input.step')
-    check = preflight(source.read_bytes())
+    check = preflight(read_bounded_file(source,max_bytes=MAX_STEP_BYTES,expected_size=job['input']['size'],
+        expected_sha256=job['input']['sha256'],changed_message='STEP differs from the pinned job input.'))
     if check['sha256'] != job['input']['sha256'] or check['protocol'] != job['input']['protocol']:
         raise DomainError('STEP differs from the pinned job input.')
     base = check_environment(session)
     # Never modify an existing part or CAM session, including background parts.
-    if session.Parts.Work is not None or session.Parts.Display is not None or list(session.Parts):
+    if session.Parts.Work is not None or session.Parts.Display is not None or any(True for _ in session.Parts):
         raise DomainError('Close all parts first. This import requires a fresh, empty NX session.')
     if session.IsCamSessionInitialized():
         raise DomainError('A CAM session is already initialized. Restart an isolated NX session in Modeling.')
@@ -152,11 +242,13 @@ def run_job(directory, session, nx):
     output.mkdir(exist_ok=False)  # One run only; failures retained, never overwritten.
     report = {'contract_version': 1, 'job_id': job['id'], 'resource_id': job['resource_id'],
               'resource_revision': job['resource_revision'], 'input_sha256': check['sha256'],
+              'resource_hash': job['resource_hash'], 'worker_hashes': job['worker_hashes'],
               'nx_version': '2512', 'installation': str(base), 'tool_type': job['tool_type'],
               'status': 'failed', 'parts': [], 'components': [], 'files': [],
               'errors': [], 'warnings': [], 'automatic_cam_approval': False}
     previous = Path.cwd()
     try:
+        budget = _ReportBudget(report)
         # Some translators write log/component files relative to cwd.
         os.chdir(output)
         protocol = check['protocol']
@@ -194,9 +286,10 @@ def run_job(directory, session, nx):
                     status.GetStatusDescription(i) for i in range(status.NumberUnloadedParts)))
         finally:
             status.Dispose()
-        imported = list(session.Parts)
-        for item in imported:
-            report['parts'].append(inventory_part(item, output))
+        for item in session.Parts:
+            if len(report['parts']) >= MAX_REPORT_PARTS:
+                raise DomainError('Part count exceeds diagnostic bounds; only a partial part inventory is recorded.')
+            budget.append('parts', inventory_part(item, output))
         root = part.ComponentAssembly.RootComponent
         if root is not None:
             pending = [(root, '')]
@@ -204,25 +297,45 @@ def run_job(directory, session, nx):
                 parent, parent_id = pending.pop()
                 for index, component in enumerate(parent.GetChildren()):
                     component_id = parent_id + '/' + str(index)
+                    # Stop before inspecting the next prototype or growing the
+                    # pending tree; retain an uploadable partial failed report.
+                    if len(report['components']) >= MAX_REPORT_COMPONENTS:
+                        raise DomainError('Component count exceeds diagnostic bounds; only a partial component inventory is recorded.')
+                    if len(component_id) > MAX_COMPONENT_ID_LENGTH:
+                        raise DomainError('Component ID depth exceeds diagnostic bounds; only a partial component inventory is recorded.')
                     prototype = offline_path(component.Prototype.FullPath)
                     try:
                         relative = prototype.relative_to(output).as_posix()
                     except ValueError as error:
                         raise DomainError('Component reference escapes the job output.') from error
-                    report['components'].append({'id': component_id, 'name': component.Name, 'part': relative})
+                    budget.append('components', {'id': component_id, 'name': component.Name, 'part': relative})
                     pending.append((component, component_id))
         report.update(summarize(report['parts'], report['components'], job['tool_type']))
     except Exception as error:
         report['status'] = 'failed'
-        report['errors'].append(str(error))
+        report['errors'].append(_diagnostic_message(error))
     finally:
         os.chdir(previous)
         # Local file list only. Original STEP, source attachments and NX libraries
         # are never altered. No cleanup removes failed diagnostic evidence.
-        report['files'] = [{'path': relative, 'size': path.stat().st_size,
-                            'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
-                           for relative, path in tree_files(output)]
-        offline_path(output / 'report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+        report['files']=[]
+        try:
+            candidates=tree_files(output)
+            if len(candidates)>MAX_REPORT_FILES:
+                report['status']='failed'
+                report['errors'].append('Output file count exceeds diagnostic bounds; only a partial file inventory is recorded.')
+            budget = _ReportBudget(report)
+            for relative,path in candidates[:MAX_REPORT_FILES]:
+                try:
+                    item = {'path':relative,**file_fingerprint(path)}
+                except (DomainError,OSError) as error:
+                    report['status']='failed'
+                    budget.append('errors', _diagnostic_message('Output file '+relative+': '+str(error)))
+                    continue
+                budget.append('files', item)
+        except (DomainError,OSError) as error:
+            report['status']='failed';report['errors'].append(_diagnostic_message('Output enumeration failed: '+str(error)))
+        offline_path(output / 'report.json').write_text(_bounded_report_text(report), encoding='utf-8')
     return report
 
 

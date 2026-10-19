@@ -1,0 +1,13 @@
+{
+  "package": "jsSHA",
+  "version": "3.3.2",
+  "release_tag": "v3.3.2",
+  "commit": "694747f7ba4d4493208ea7a259438eaab71917a1",
+  "source": "https://raw.githubusercontent.com/Caligatio/jsSHA/694747f7ba4d4493208ea7a259438eaab71917a1/dist/sha256.js",
+  "sha256": "932fa0e677f4866f8a54c958acf20401372069c36ae067b5920f58c0feb5a464",
+  "license": "BSD-3-Clause; Apache-2.0 for upstream Microsoft polyfills",
+  "license_files": ["LICENSE-jssha.txt", "LICENSE-Apache-2.0.txt"],
+  "unmodified_bundle": true,
+  "runtime_cdn": false,
+  "upstream_tag_signature_verified": false
+}

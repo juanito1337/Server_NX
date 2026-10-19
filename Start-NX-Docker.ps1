@@ -1,17 +1,26 @@
 #requires -Version 5.1
 [CmdletBinding()]
-param([ValidateSet('Start', 'Stop', 'Status', 'Config')][string]$Action = 'Start')
+param([ValidateSet('Start', 'Stop', 'Status', 'Config')][string]$Action = 'Start',
+      [ValidateSet('Prepared', 'Upgrade')][string]$Profile = 'Prepared',
+      [string]$UpgradeInputsFile)
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'NXMigrationSafety.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'NXDockerSafety.psm1') -Force
 
 $composePrefix = @('compose', '-p', 'nx-management', '--project-directory', $PSScriptRoot,
     '-f', (Join-Path $PSScriptRoot 'compose.yaml'), '-f', (Join-Path $PSScriptRoot 'compose.windows.yaml'))
+$validatedComposeFile = $null
+$validatedComposePath = $null
+$validatedComposePrefix = $null
+$composeEnvironment = @{}
+$dockerConnectionArguments = @()
 
 function Get-DockerOutput {
     param([string[]]$Arguments)
     $executable = (Get-Command docker.exe -CommandType Application -ErrorAction Stop).Source
     Assert-NXOfflinePath -Path $executable
-    $quoted = foreach ($argument in $Arguments) {
+    $dockerArguments = $dockerConnectionArguments + $Arguments
+    $quoted = foreach ($argument in $dockerArguments) {
         $escaped = [regex]::Replace($argument, '(\\*)"', '$1$1\"')
         $escaped = [regex]::Replace($escaped, '(\\+)$', '$1$1')
         '"' + $escaped + '"'
@@ -23,6 +32,8 @@ function Get-DockerOutput {
     $process.StartInfo.UseShellExecute = $false
     $process.StartInfo.RedirectStandardOutput = $true
     $process.StartInfo.RedirectStandardError = $true
+    $process.StartInfo.StandardOutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    foreach ($name in $composeEnvironment.Keys) { $process.StartInfo.EnvironmentVariables[$name] = $composeEnvironment[$name] }
     try {
         [void]$process.Start()
         $stdout = $process.StandardOutput.ReadToEndAsync()
@@ -36,9 +47,27 @@ function Get-DockerOutput {
 
 function Invoke-Compose {
     param([string[]]$Arguments)
-    $composeArguments = $composePrefix + $Arguments
-    $code = Invoke-NXExternalProcess -FilePath 'docker.exe' -Arguments $composeArguments -WorkingDirectory $PSScriptRoot
+    if (-not $validatedComposeFile -or $dockerConnectionArguments.Count -ne 2) { throw 'Kein gepruefter lokaler Docker-Ausfuehrungsplan vorhanden.' }
+    # Feed the same approved plan for every action. Original YAML/.env changes
+    # after validation must not alter the configuration used by Compose.
+    $code = Invoke-NXExternalProcess -FilePath 'docker.exe' -Arguments ($dockerConnectionArguments + $validatedComposePrefix + $Arguments) -WorkingDirectory $PSScriptRoot
     if ($code -ne 0) { throw "Docker Compose ist fehlgeschlagen (Exit $code)." }
+}
+
+function Read-UpgradeInputs {
+    if ([string]::IsNullOrWhiteSpace($UpgradeInputsFile)) { throw 'Fuer -Profile Upgrade ist -UpgradeInputsFile erforderlich. Beispiel: docker\upgrade-inputs.example.json.' }
+    Assert-NXOfflinePath -Path $UpgradeInputsFile -Label 'Lokale Docker-Upgrade-Eingabedatei'
+    $item = Get-Item -LiteralPath $UpgradeInputsFile -Force -ErrorAction Stop
+    if ($item -isnot [System.IO.FileInfo] -or $item.Length -lt 2 -or $item.Length -gt 16384) { throw 'Die Upgrade-Eingabedatei muss eine kleine regulaere JSON-Datei sein (max. 16 KiB).' }
+    $stream = New-Object System.IO.FileStream($item.FullName, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+    try {
+        if ($stream.Length -lt 2 -or $stream.Length -gt 16384) { throw 'Ungueltige Upgrade-Eingabegroesse.' }
+        $reader = New-Object System.IO.StreamReader($stream, (New-Object System.Text.UTF8Encoding($false, $true)), $true)
+        try { $json = $reader.ReadToEnd() } finally { $reader.Dispose() }
+        try { $configuration = $json | ConvertFrom-Json -ErrorAction Stop } catch { throw 'Die Upgrade-Eingabedatei enthaelt kein gueltiges JSON.' }
+        return Get-NXWindowsUpgradeInputs -Configuration $configuration
+    }
+    finally { $stream.Dispose() }
 }
 
 try {
@@ -54,29 +83,47 @@ try {
     if ($endpoint -notmatch '^npipe:////\./pipe/(docker_engine|dockerDesktopLinuxEngine)$') {
         throw 'Dieser Windows-Starter akzeptiert nur eine lokale Docker-Desktop Pipe, keinen Remote-Kontext.'
     }
-    if ($Action -eq 'Stop') { Invoke-Compose -Arguments @('down'); exit 0 }
-    if ($Action -eq 'Status') { Invoke-Compose -Arguments @('ps'); exit 0 }
-    if ($Action -eq 'Config') { Invoke-Compose -Arguments @('config', '--quiet'); exit 0 }
-
+    # Pin the verified endpoint, not the mutable context name/default selection.
+    # Explicit --host takes precedence over inherited context/host environment.
+    $dockerConnectionArguments = @('--host', $endpoint)
     # Validate fixed local paths BEFORE Docker could mount them. No W:/UNC,
     # network-drive alias or junction is accepted by this starter.
     $sourcePaths = @('C:\NX_Migration\NX2512_Managed_20261006', 'C:\Siemens\NX2406',
                      'C:\Siemens\NX2512', 'C:\NX_Migration\TestRuntime\temp')
     $releasePath = 'C:\NX_Migration\DockerReleases'
-    Assert-NXOfflinePath -Path $PSScriptRoot -Label 'Projektordner'
-    Assert-NXOfflinePath -Path $releasePath -Label 'Docker-Testausgabe'
-    Assert-NXDisjointPaths -First $PSScriptRoot -Second $releasePath
-    foreach ($sourcePath in $sourcePaths) {
-        Assert-NXOfflinePath -Path $sourcePath -Label 'Docker-Lesequelle'
-        Assert-NXDisjointPaths -First $releasePath -Second $sourcePath
-        if (-not (Test-Path -LiteralPath $sourcePath -PathType Container)) { throw "Lokale Lesequelle fehlt: $sourcePath" }
+    $permitted = @{
+        '/app/config/settings.json' = (Join-Path $PSScriptRoot 'docker\settings.windows.json')
+        '/inputs/nx2512-managed' = $sourcePaths[0]
+        '/standards/2406' = $sourcePaths[1]
+        '/standards/2512' = $sourcePaths[2]
+        '/logs/nx-test' = $sourcePaths[3]
+        '/data/r' = $releasePath
     }
-    # Require a local Linux daemon. A remote context would use the remote
-    # server's paths, not this PC's C: folders.
-    $daemonText = Get-DockerOutput -Arguments @('info', '--format', '{{.OSType}}')
-    if ($daemonText -ne 'linux') {
-        throw 'Docker Desktop muss laufen und auf Linux-Container eingestellt sein.'
+    if ($Profile -eq 'Upgrade') {
+        $inputs = Read-UpgradeInputs
+        $sourcePaths = @($inputs.source, 'C:\Siemens\NX2406', 'C:\Siemens\NX2512', $inputs.sidt_2406, $inputs.sidt_2512)
+        $permitted = @{
+            '/app/config/settings.json' = (Join-Path $PSScriptRoot 'docker\settings.windows-upgrade.json')
+            '/inputs/nx2406-local' = $sourcePaths[0]
+            '/standards/2406' = $sourcePaths[1]
+            '/standards/2512' = $sourcePaths[2]
+            '/sidts/2406' = $sourcePaths[3]
+            '/sidts/2512' = $sourcePaths[4]
+            '/data/r' = $releasePath
+        }
+        foreach ($sourcePath in $sourcePaths) {
+            Assert-NXOfflinePath -Path $sourcePath -Label 'Lokale Docker-Upgrade-Lesequelle'
+            Assert-NXDisjointPaths -First $sourcePath -Second $releasePath
+        }
+        $composeEnvironment = @{
+            'NX_UPGRADE_SOURCE' = $inputs.source.Replace('\', '/')
+            'NX_UPGRADE_SIDT_2406' = $inputs.sidt_2406.Replace('\', '/')
+            'NX_UPGRADE_SIDT_2512' = $inputs.sidt_2512.Replace('\', '/')
+        }
+        $composePrefix = @('compose', '-p', 'nx-management', '--project-directory', $PSScriptRoot,
+            '-f', (Join-Path $PSScriptRoot 'compose.yaml'), '-f', (Join-Path $PSScriptRoot 'compose.windows-upgrade.yaml'))
     }
+    elseif ($PSBoundParameters.ContainsKey('UpgradeInputsFile')) { throw '-UpgradeInputsFile ist nur zusammen mit -Profile Upgrade erlaubt.' }
     # Validate the resolved Compose configuration, not only our default strings.
     # Edited YAML must not bypass production protection or mount extra targets.
     $resolved = Get-DockerOutput -Arguments ($composePrefix + @('config', '--format', 'json')) | ConvertFrom-Json
@@ -88,14 +135,63 @@ try {
         $resolved.services.nxserver.secrets[0].source -ne 'nx_admin_token') {
         throw 'Dieser lokale Starter akzeptiert nur das konfigurierte Administrations-Secret.'
     }
-    $permitted = @{
-        '/app/config/settings.json' = (Join-Path $PSScriptRoot 'docker\settings.windows.json')
-        '/inputs/nx2512-managed' = $sourcePaths[0]
-        '/standards/2406' = $sourcePaths[1]
-        '/standards/2512' = $sourcePaths[2]
-        '/logs/nx-test' = $sourcePaths[3]
-        '/data/r' = $releasePath
+    $webPort = 8765
+    if ($env:NX_WEB_PORT) {
+        if ($env:NX_WEB_PORT -notmatch '^[1-9][0-9]{0,4}$' -or [int]$env:NX_WEB_PORT -gt 65535) { throw 'NX_WEB_PORT muss eine lokale Portnummer zwischen 1 und 65535 sein.' }
+        $webPort = [int]$env:NX_WEB_PORT
     }
+    # Pure resolved-profile gate applies to ALL actions, before state changes.
+    Assert-NXLocalDockerProfile -Configuration $resolved -ProjectRoot $PSScriptRoot -PermittedBindings $permitted -WebPort $webPort
+    # Compose parses the frozen JSON as a Compose document again. Escape dollars
+    # in the already-resolved values so this second parse cannot interpolate them.
+    $validatedComposeJson = ($resolved | ConvertTo-Json -Depth 100 -Compress).Replace('$', '$$')
+    $temporaryRoot = [System.IO.Path]::GetTempPath()
+    Assert-NXOfflinePath -Path $temporaryRoot -Label 'Temporaerer Docker-Planordner'
+    $validatedComposePath = Join-Path $temporaryRoot ('nx-compose-' + [Guid]::NewGuid().ToString('N') + '.json')
+    Assert-NXOfflinePath -Path $validatedComposePath -Label 'Gepruefter Docker-Ausfuehrungsplan'
+    foreach ($protectedRoot in (@($PSScriptRoot, $releasePath) + $sourcePaths)) {
+        Assert-NXDisjointPaths -First $validatedComposePath -Second $protectedRoot
+    }
+    # CreateNew cannot replace another file. Keep this handle open: readers are
+    # allowed, but no other process may change or delete the plan during actions.
+    $validatedComposeFile = New-Object System.IO.FileStream($validatedComposePath, [System.IO.FileMode]::CreateNew,
+        [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::Read)
+    $planBytes = [System.Text.Encoding]::UTF8.GetBytes($validatedComposeJson)
+    $validatedComposeFile.Write($planBytes, 0, $planBytes.Length)
+    $validatedComposeFile.Flush()
+    $validatedComposePrefix = @('compose', '-p', 'nx-management', '--project-directory', $PSScriptRoot,
+        '-f', $validatedComposePath)
+    if ($Action -eq 'Stop') { Invoke-Compose -Arguments @('stop', 'nxserver'); Write-Host 'Nur nxserver gestoppt; Container, Netz und Datenvolume bleiben erhalten.'; exit 0 }
+    if ($Action -eq 'Status') { Invoke-Compose -Arguments @('ps', 'nxserver'); exit 0 }
+    if ($Action -eq 'Config') { Invoke-Compose -Arguments @('config', '--quiet'); exit 0 }
+    Assert-NXOfflinePath -Path $releasePath -Label 'Docker-Testausgabe'
+    Assert-NXDisjointPaths -First $PSScriptRoot -Second $releasePath
+    foreach ($sourcePath in $sourcePaths) {
+        Assert-NXOfflinePath -Path $sourcePath -Label 'Docker-Lesequelle'
+        Assert-NXDisjointPaths -First $releasePath -Second $sourcePath
+        if (-not (Test-Path -LiteralPath $sourcePath -PathType Container)) { throw "Lokale Lesequelle fehlt: $sourcePath" }
+    }
+    if ($Profile -eq 'Upgrade') {
+        $required = @(
+            @($inputs.source, 'MACH\resource', 'Container'), @($inputs.source, 'UGII', 'Container'),
+            @($sourcePaths[1], 'NXBIN\ugraf.exe', 'Leaf'), @($sourcePaths[2], 'NXBIN\ugraf.exe', 'Leaf'))
+        foreach ($sidt in @($inputs.sidt_2406, $inputs.sidt_2512)) {
+            $required += ,@($sidt, 'applications\nx\after_install.bat', 'Leaf')
+            $required += ,@($sidt, 'applications\nx\ugii', 'Container')
+            $required += ,@($sidt, 'applications\nx\nxplot', 'Container')
+        }
+        foreach ($entry in $required) {
+            $path = Join-Path $entry[0] $entry[1]
+            Assert-NXOfflinePath -Path $path -Label 'Docker-Upgrade-Eingabestruktur'
+            if (-not (Test-Path -LiteralPath $path -PathType $entry[2])) { throw 'Unvollstaendige NX2406-/Siemens-/SIDT-Eingabe. Keine Quellen werden automatisch angelegt oder Installer ausgefuehrt.' }
+        }
+    }
+    Assert-NXOfflinePath -Path (Join-Path $PSScriptRoot 'server') -Label 'Docker-Buildordner'
+    Assert-NXOfflinePath -Path (Join-Path $PSScriptRoot 'server\Dockerfile') -Label 'Docker-Builddatei'
+    Assert-NXTreeNoReparsePoint -Root (Join-Path $PSScriptRoot 'server\nxserver')
+    # Require a local Linux daemon, never a remote engine.
+    $daemonText = Get-DockerOutput -Arguments @('info', '--format', '{{.OSType}}')
+    if ($daemonText -ne 'linux') { throw 'Docker Desktop muss laufen und auf Linux-Container eingestellt sein.' }
     foreach ($mount in $resolved.services.nxserver.volumes) {
         if ($mount.type -eq 'volume' -and $mount.target -eq '/data') {
             if ($mount.source -ne 'management-data') { throw 'Unerwartetes Verwaltungsvolume.' }
@@ -109,8 +205,8 @@ try {
         if ($mount.target -ne '/data/r' -and $mount.read_only -ne $true) { throw "Lesequelle muss readonly sein: $($mount.target)" }
     }
     $targets = @($resolved.services.nxserver.volumes | ForEach-Object { $_.target })
-    if ($targets.Count -ne 7 -or @($permitted.Keys | Where-Object { $_ -notin $targets }).Count -gt 0 -or '/data' -notin $targets) {
-        throw 'Die erwarteten sieben Docker-Einbindungen sind nicht vollstaendig vorhanden.'
+    if ($targets.Count -ne ($permitted.Count + 1) -or @($permitted.Keys | Where-Object { $_ -notin $targets }).Count -gt 0 -or '/data' -notin $targets) {
+        throw 'Die erwarteten Docker-Einbindungen sind nicht vollstaendig vorhanden.'
     }
     $managedVolume = $resolved.volumes.'management-data'
     if ($managedVolume.driver_opts -or $managedVolume.external -or ($managedVolume.driver -and $managedVolume.driver -ne 'local')) {
@@ -123,6 +219,7 @@ try {
     }
     Write-Host 'Lokale Quellbaeume werden auf Links/Junctions geprueft. Dateien werden nicht geaendert.'
     foreach ($sourcePath in $sourcePaths) { Assert-NXTreeNoReparsePoint -Root $sourcePath }
+    if (Test-Path -LiteralPath $releasePath) { Assert-NXTreeNoReparsePoint -Root $releasePath }
     if (-not (Test-Path -LiteralPath $releasePath)) { [void][System.IO.Directory]::CreateDirectory($releasePath) }
     $secretDirectory = Join-Path $PSScriptRoot 'docker\secrets'
     $secretPath = Join-Path $secretDirectory 'admin_token.txt'
@@ -154,3 +251,9 @@ try {
     Write-Host 'Das Startfenster kann geschlossen werden. Stoppen: Start-NX-Docker.ps1 -Action Stop (ohne Volume-Loeschung).'
 }
 catch { Write-Error $_; exit 1 }
+finally {
+    if ($validatedComposeFile) {
+        $validatedComposeFile.Dispose()
+        [System.IO.File]::Delete($validatedComposePath)
+    }
+}

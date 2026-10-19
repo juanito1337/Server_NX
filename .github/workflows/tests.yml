@@ -1,0 +1,160 @@
+name: NX Test Pipeline
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      browser_tests:
+        description: Vollstaendige isolierte Edge-Tests ausfuehren
+        type: boolean
+        default: true
+      container_test:
+        description: Zusaetzlicher echter Docker-Test NUR auf dem GitHub-Runner
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nx-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: server
+
+env:
+  PYTHONIOENCODING: utf-8
+  PYTHONUNBUFFERED: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+jobs:
+  core:
+    name: Core ${{ matrix.platform.os }} / ${{ matrix.shard }}
+    runs-on: ${{ matrix.platform.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - {os: ubuntu-24.04, python: '3.12'}
+          - {os: windows-2022, python: '3.10'}
+        shard: [0, 1]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.platform.python }}
+          cache: pip
+          cache-dependency-path: server/requirements*.txt
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install pinned test dependencies
+        run: >-
+          python -m pip install --only-binary=:all: -r requirements-test.txt
+      - name: Check JavaScript syntax
+        run: python -c "import pathlib,subprocess; [subprocess.run(['node','--check',str(p)],check=True) for p in sorted(pathlib.Path('nxserver/web').glob('*.js'))]"
+      - name: Run core tests
+        run: python tools/run_ci_tests.py --suite core --shard-count 2 --shard-index ${{ matrix.shard }}
+      - name: Keep plans and test results, also on failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: core-${{ matrix.platform.os }}-${{ matrix.shard }}
+          path: server/test-results/
+          retention-days: 14
+          if-no-files-found: warn
+
+  browser:
+    name: Edge UI / ${{ matrix.shard }}
+    if: github.event_name != 'workflow_dispatch' || inputs.browser_tests
+    runs-on: windows-2022
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.10'
+          cache: pip
+          cache-dependency-path: server/requirements*.txt
+      - name: Install pinned test dependencies
+        run: >-
+          python -m pip install --only-binary=:all: -r requirements-test.txt
+      - name: Prepare Edge on the disposable hosted runner only
+        run: python -m playwright install msedge
+      - name: Run browser tests
+        run: python tools/run_ci_tests.py --suite browser --shard-count 4 --shard-index ${{ matrix.shard }}
+      - name: Keep plans and test results, also on failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: browser-windows-${{ matrix.shard }}
+          path: server/test-results/
+          retention-days: 14
+          if-no-files-found: warn
+
+  container:
+    name: Optional isolated Docker runtime
+    if: github.event_name == 'workflow_dispatch' && inputs.container_test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - name: Install pinned test dependencies
+        run: >-
+          python -m pip install --only-binary=:all: -r requirements-test.txt
+      - name: Test disposable container and persistence, never deploy
+        run: python tools/run_ci_tests.py --suite container
+      - name: Keep plans and test results, also on failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: container-runtime
+          path: server/test-results/
+          retention-days: 14
+          if-no-files-found: warn
+
+  result:
+    name: NX CI result
+    if: always()
+    needs: [core, browser, container]
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: .
+    env:
+      CORE_RESULT: ${{ needs.core.result }}
+      BROWSER_RESULT: ${{ needs.browser.result }}
+      CONTAINER_RESULT: ${{ needs.container.result }}
+      BROWSER_REQUIRED: ${{ github.event_name != 'workflow_dispatch' || inputs.browser_tests }}
+      CONTAINER_REQUIRED: ${{ github.event_name == 'workflow_dispatch' && inputs.container_test }}
+    steps:
+      - name: Require successful selected jobs
+        run: |
+          python - <<'PY'
+          import os
+          required = ['CORE']
+          required += ['BROWSER'] if os.environ['BROWSER_REQUIRED'] == 'true' else []
+          required += ['CONTAINER'] if os.environ['CONTAINER_REQUIRED'] == 'true' else []
+          results = {name: os.environ[name + '_RESULT'] for name in required}
+          print(results)
+          if any(value != 'success' for value in results.values()):
+              raise SystemExit('A selected test job failed, was cancelled or did not run.')
+          PY

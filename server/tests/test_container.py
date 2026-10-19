@@ -11,7 +11,7 @@ import pytest
 
 from nxserver.config import startup, token_from_environment
 from nxserver.safety import DomainError, offline_path
-from nxserver.store import FUNCTIONAL_TESTS, Store, TOOL_DATABASE
+from nxserver.store import FUNCTIONAL_TESTS, Store, TOOL_DATABASE, digest
 
 
 def settings(tmp_path):
@@ -94,13 +94,15 @@ def test_windows_host_release_mapping_survives_restart_and_binds_exact_log(tmp_p
     assert Path(release['folder']).is_dir()
     assert (source / TOOL_DATABASE).read_text(encoding='utf-8').endswith('#END_DATA\n')
     for wrong in (str(source), release['host_folder'] + '_old', str(Path(release['host_folder']).parent)):
-        log.write_text('UG_APP_MANUFACTURING\n' + wrong, encoding='utf-8')
+        log.write_text('NX_VERSION = 2512.8500\nUG_APP_MANUFACTURING\n' + wrong, encoding='utf-8')
         with pytest.raises(DomainError, match='approval blocked'):
             store.review_release(release['id'], {key: True for key in FUNCTIONAL_TESTS},
-                                 'Qualified fixture review only, not real NX.', 'test', 'admin')
-    log.write_text('UG_APP_MANUFACTURING\n' + release['host_folder'].replace('\\', '/').upper() + '/MACH/resource/file.prt', encoding='utf-8')
+                                 'Qualified fixture review only, not real NX.', 'test', 'admin',
+                                 store.scan_log('test')['sha256'],digest(release['manifest']))
+    log.write_text('NX_VERSION = 2512.8500\nUG_APP_MANUFACTURING\n' + release['host_folder'].replace('\\', '/').upper() + '/MACH/resource/file.prt', encoding='utf-8')
     assert store.review_release(release['id'], {key: True for key in FUNCTIONAL_TESTS},
-                                'Qualified fixture review only, not real NX.', 'test', 'admin')['status'] == 'approved'
+                                'Qualified fixture review only, not real NX.', 'test', 'admin',
+                                store.scan_log('test')['sha256'],digest(release['manifest']))['status'] == 'approved'
     store.activate(release['id'], 0, 'admin')
     restarted = Store(root, {'test': source}, {'test': log}, display_paths=mapping)
     assert restarted.active()['host_folder'] == release['host_folder']
@@ -135,7 +137,9 @@ def test_runtime_build_context_is_allowlisted_and_has_no_test_dependencies():
     assert 'USER 10001:10001' in dockerfile and '--only-binary=:all:' in dockerfile
     assert 'COPY nxserver ./nxserver' in dockerfile and 'COPY . ' not in dockerfile
     ignore = (root / '.dockerignore').read_text()
-    assert '**\n' in ignore and '!nxserver/**' in ignore
+    assert '**\n' in ignore and '!nxserver/**/' in ignore and '!nxserver/**/*.py' in ignore
+    assert '!nxserver/**\n' not in ignore and '!nxserver/**/*.json' not in ignore and '!nxserver/**/*.txt' not in ignore
+    assert '!nxserver/web/vendor/LICENSE-*.txt' in ignore and '!nxserver/web/vendor/provenance.json' in ignore
     assert '!settings.example.json' not in ignore
 
 

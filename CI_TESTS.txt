@@ -1,0 +1,90 @@
+NX-Projekt: automatisierte Testpipeline
+Stand: 16.10.2026
+
+Dateien
+- .github/workflows/tests.yml: GitHub Actions, keine Bereitstellung.
+- server/tools/run_ci_tests.py: derselbe Teststarter lokal und in CI.
+- server/tests/test_ci_pipeline.py: Selbsttests des Starters und der Pipelinepolitik.
+
+Automatische Ausloeser
+- Push und Pull Request: Kernpruefungen auf Ubuntu/Python3.12 und Windows/
+  Python3.10, je zwei getrennte Testgruppen; komplette GUI-Suite auf vier
+  separaten Windows-/Edge-Runnern. Neue Tests werden automatisch gesammelt.
+- Manuell: Repository -> Actions -> NX Test Pipeline -> Run workflow.
+  Browserpruefungen sind standardmaessig an und nur beim manuellen Lauf
+  abwaehlbar. Ein reiner Kernlauf ist kein vollstaendiger GUI-Nachweis.
+- Echter Docker-Runtimetest nur auf ausdrueckliche manuelle Auswahl; startet
+  ausschliesslich Wegwerfcontainer auf dem GitHub-Runner, keinen Kundenserver.
+  Kein Engineaufruf oder Browserupdate auf dem lokalen Test-PC durch den Workflow.
+
+Pruefbereiche
+- Migration/Ordnerimport, Datenbanken und neue Spalten, Stammdaten/ERP-Zuordnung,
+  Revisionen/Export, Anhaenge/Dateipakete, Protokolle/Freigabegates, Sicherung/
+  Wiederherstellung, Windows-Starter sowie echte isolierte Browserablaeufe.
+- Der Starter schreibt je eindeutigem Lauf plan.json mit den gesammelten und
+  ausgewaehlten Fallkennungen/Hashes, junit.xml und summary.json. Testgruppen
+  werden deterministisch und ohne Doppelzaehlung aufgeteilt. Fehlende Faelle,
+  Fehler, Abbrueche und leere Gruppen werden nicht zu einem gruenen Ergebnis.
+- Uebersprungene Plattform-/Optinfaelle bleiben im Bericht sichtbar. Keine
+  Installer-, NX-/SiemensDLL-/Modell- oder echte ERP-/Cloud-/MMP-Ausfuehrung.
+  Installierte Siemens-Daten sind auf GitHub nicht erforderlich; entsprechende
+  lokale Optins werden bewusst entfernt. Synthetische Daten bleiben getrennt.
+- Pythonabhaengigkeiten bleiben auf vorhandene Versionen festgelegt; verwendete
+  GitHub Actions sind auf vollstaendige, offiziell nachgepruefte Commit-SHAs
+  gepinnt. Nur contents:read, keine Secrets, kein self-hosted Runner, keine
+  Push-/Release-/Deployaktionen. persist-credentials ist ausgeschaltet.
+
+Ergebnisse auf GitHub
+- Unter Actions den Lauf und den fehlgeschlagenen Job oeffnen.
+- Artifacts enthalten Testplan, JUnit und Zusammenfassung, auch bei Fehlern;
+  Aufbewahrung14Tage. Keine kompletten Testordner, Modelle oder Zugangsdaten.
+- "NX CI result" ist der stabile Sammelcheck. Er verlangt Erfolg aller
+  ausgewaehlten Jobs, nicht bloss den Abschluss eines Jobs. Optional kann dieser
+  Check spaeter als verpflichtender Mergecheck eingerichtet werden; diese
+  Repositoryeinstellung wurde hier nicht automatisch geaendert.
+- Zusaetzliche Windows-/GUI-Jobs verbrauchen GitHub-Actions-Minuten. Abrechnung
+  haengt vom Repository und Tarif ab; es wurde kein kostenpflichtiger Dienst
+  oder zusaetzlicher Tarif eingerichtet.
+
+Lokal ausfuehren (Arbeitsverzeichnis server, vorhandene Testumgebung)
+  python -m pip install --only-binary=:all: -r requirements-test.txt
+  python tools/run_ci_tests.py --suite core
+  python tools/run_ci_tests.py --suite browser --shard-count 4 --shard-index 0
+  python tools/run_ci_tests.py --suite core --collect-only
+Fuer alle GUI-Faelle die Indizes0,1,2,3 ausfuehren; Browser muss schon verfuegbar
+sein. Auf dem Benutzer-PC nicht unnoetig "playwright install msedge" starten,
+weil das einen vorhandenen Browser ersetzen kann. In CI geschieht dies nur
+auf dem wegwerfbaren GitHub-Runner. Container-Suite nicht unabsichtlich lokal
+starten: --suite container ist ein ausdruecklicher Engine-Optin.
+
+Grenzen und Aktivierung
+- Diese Dateien sind lokal vorbereitet. Erst wenn Workflow UND benoetigte
+  Anwendungs-/Testdateien committed und gepusht sind, kann GitHub sie ausfuehren.
+  Kein Commit/Push, keine Branchschutz-Aenderung und kein GitHub-Lauf behauptet.
+- Vor der Pipelineerweiterung wurden4154Faelle/201Module gesammelt. Das ist
+  kein Beleg, dass alle bestanden sind. Die vorhandene historische gruene
+  Gesamtbaseline und der neuere noch laufende Gesamttest bleiben getrennt;
+  dieser zeigte bereits einzelne GUI-Fehler. Nicht ignorieren oder Tests
+  ausblenden, sondern die konkreten Berichte nach ihrem Abschluss auswerten.
+- Die allgemeine Weiterentwicklung bleibt auf Nutzerwunsch pausiert. Diese
+  Pipeline ist ein gesondert angefragter Auftrag, kein automatisches Resume.
+- Echte NX-/STEP-/Maschinen-/SMB-/ERP-Abnahme bleibt ein eigener Praxistest.
+
+Lokale Pruefung der Pipelineerweiterung
+- 25eigene Pipeline-/Starterfaelle auf Windows und Linux bestanden, darunter
+  echte winzige pytest-Projekte fuer Erfolg, Testfehler, Skip, Importfehler
+  und reine Collection. Kein erneuter Gesamtlauf aller Anwendungstests.
+- Workflow mit YAML-Parser und actionlint1.7.12 geprueft. Validator nur im
+  eigenen Tempordner; Downloadhash gegen offizielle GitHub-Releaseangabe
+  verglichen, keine globale Installation. Der erste YAML-Quotingfehler und
+  ein anfangs verdeckter Collection-Exitcode wurden gefunden und korrigiert.
+- Der neue Starter sammelt auf Windows und Linux denselben aktuellen Umfang:
+  4179Faelle inkl.25neuer Pipelinefaelle; erste Kernhaelfte je1474Faelle.
+  Collection ist ausdruecklich KEIN bestandener Anwendungstest.
+- Weder GitHub Actions noch optionaler Dockerjob wurden hier gestartet.
+  Produktivverzeichnis, lokaler Server und dessen Datenbank bleiben unberuehrt.
+
+Offizielle Grundlagen
+https://docs.github.com/en/actions/tutorials/build-and-test-code/python
+https://docs.github.com/en/actions/reference/security/secure-use
+https://playwright.dev/python/docs/ci

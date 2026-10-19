@@ -1,0 +1,8 @@
+{
+  "data_dir": "/data",
+  "sources": {"nx2406-local": "/inputs/nx2406-local"},
+  "logs": {},
+  "standards": {"2406": "/standards/2406", "2512": "/standards/2512"},
+  "sidts": {"2406": "/sidts/2406", "2512": "/sidts/2512"},
+  "display_paths": {"/data/r": "C:\\NX_Migration\\DockerReleases"}
+}

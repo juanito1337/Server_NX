@@ -6,11 +6,12 @@ together; LIBRF alone is not a row key for holders, shanks or multitools.
 import copy
 import hashlib
 import json
+import math
 import re
 from collections import Counter, defaultdict
 from pathlib import PurePosixPath
 
-from .safety import DomainError, offline_path, tree_files
+from .safety import DomainError, offline_path, tree_files, asset_filename
 
 
 KINDS = {
@@ -24,8 +25,27 @@ KINDS = {
     'process_force': 'Prozesskraftparameter', 'gauge': 'Prüfmittel',
     'inspection_tool': 'CMM-Taster', 'inspection_machine': 'CMM-Maschine',
     'inspection_device': 'CMM-Messkopf',
+    'template':'NX-Vorlagenpaket','ui_standard':'NX-Oberflächenstandard',
 }
 SPECS = {}
+MAX_CATALOG_SELECTION = 500
+
+
+def catalog_selection(identifiers,selection):
+    """Exact whole-object keys; None preserves the existing whole-library mode."""
+    if selection is None:return None
+    if not isinstance(selection,dict) or not selection or len(identifiers)!=len(set(identifiers)) or set(selection)!=set(identifiers):
+        raise DomainError('Selection must name exactly the chosen, distinct libraries; empty selection is not whole-library import.')
+    count=0;result={}
+    for identifier,keys in selection.items():
+        spec_for(identifier)
+        if not isinstance(keys,list) or not keys or any(not isinstance(key,str) or not 1<=len(key)<=1024 or any(char in key for char in '|\r\n\x00') for key in keys):
+            raise DomainError('Select complete library objects using nonempty keys up to 1024 characters.')
+        if len(keys)!=len(set(keys)):raise DomainError('Selected object keys must be distinct within each library.')
+        count+=len(keys)
+        if count>MAX_CATALOG_SELECTION:raise DomainError('Select at most 500 complete objects per adoption.')
+        result[identifier]=sorted(keys)
+    return dict(sorted(result.items()))
 
 
 def _spec(identifier, kind, path, legacy=None, graphics=None):
@@ -79,33 +99,57 @@ def decode(raw):
         raise DomainError('NX library must be readable UTF-8/UTF-16; no lossy decoding.') from error
 
 
+def _native_tokens(text):
+    """Yield a complete continuation token without retaining every DATA row."""
+    current_class='TABLE';pending=None
+    for line in text.splitlines(keepends=True):
+        stripped=line.strip();match=re.match(r'^(FORMAT|DATA)\b(.*)',stripped)
+        if stripped.startswith('#CLASS '):
+            if pending is not None:yield pending
+            current_class=stripped[7:].strip();pending={'type':'raw','raw':line,'class':current_class}
+        elif match:
+            if pending is not None:yield pending
+            pending={'type':match[1],'body':match[2].strip(),'raw':line,'class':current_class}
+        elif stripped and not stripped.startswith('#'):
+            if pending is None or pending['type'] not in ('FORMAT','DATA'):
+                raise DomainError('Unexpected NX library content; no automatic rewrite.')
+            pending['body']+=' '+stripped;pending['raw']+=line
+        else:
+            if pending is not None:yield pending
+            pending={'type':'raw','raw':line,'class':current_class}
+    if pending is not None:yield pending
+
+
+def _native_values(body,block):
+    # Retain the existing optional leading/trailing empty-pipe semantics,
+    # without allocating one object per excess trailing pipe in malformed input.
+    first,separator,rest=body.partition('|')
+    if not first.strip():body=rest if separator else None
+    values=[] if body is None else body.split('|',len(block['fields']))
+    if len(values)>len(block['fields']) and not values[-1].replace('|','').strip():values.pop()
+    if len(values)!=len(block['fields']):raise DomainError('NX DATA does not match FORMAT in '+block['id'])
+    return [value.strip() for value in values]
+
+
 class NativeTable:
-    def __init__(self, text):
-        self.text, self.blocks, self.records, self.tokens = text, [], [], []
-        current_class = 'TABLE'
-        # Preserve original lines/comments, including multiline FORMAT/DATA.
-        for line in text.splitlines(keepends=True):
-            stripped = line.strip()
-            match = re.match(r'^(FORMAT|DATA)\b(.*)', stripped)
-            if stripped.startswith('#CLASS '):
-                current_class = stripped[7:].strip()
-                self.tokens.append({'type': 'raw', 'raw': line, 'class': current_class})
-            elif match:
-                self.tokens.append({'type': match[1], 'body': match[2].strip(), 'raw': line, 'class': current_class})
-            elif stripped and not stripped.startswith('#'):
-                if not self.tokens or self.tokens[-1]['type'] not in ('FORMAT', 'DATA'):
-                    raise DomainError('Unexpected NX library content; no automatic rewrite.')
-                self.tokens[-1]['body'] += ' ' + stripped
-                self.tokens[-1]['raw'] += line
-            else:
-                self.tokens.append({'type': 'raw', 'raw': line, 'class': current_class})
+    def __init__(self,text,*,schema_only=False,max_schemas=None,max_fields=None):
+        if type(schema_only) is not bool or any(value is not None and (type(value) is not int or value<1) for value in (max_schemas,max_fields)):
+            raise DomainError('Invalid native schema reader limits.')
+        self.text,self.blocks,self.records,self.tokens='' if schema_only else text,[],[],[]
+        self.schema_only=schema_only;self.row_count=0;field_count=0
         occurrences = Counter()
         block = None
-        for token in self.tokens:
+        # Full readers preserve the same tokens/raw lines; schema readers only
+        # retain definitions and a row count, never groups or value dictionaries.
+        for token in _native_tokens(text):
+            if not schema_only:self.tokens.append(token)
             if token['type'] == 'FORMAT':
-                fields = token['body'].split()
+                fields=token['body'].split(None,max_fields-field_count) if max_fields is not None else token['body'].split()
+                if max_schemas is not None and len(self.blocks)>=max_schemas or max_fields is not None and field_count+len(fields)>max_fields:
+                    raise DomainError('Native library exceeds the schema definition bound.')
                 if not fields or len(fields) != len(set(fields)) or not ({'LIBRF', 'NAME'} & set(fields)):
                     raise DomainError('Invalid NX FORMAT block.')
+                field_count+=len(fields)
                 occurrences[token['class']] += 1
                 block = {'id': token['class'] + ':' + str(occurrences[token['class']]),
                          'class_name': token['class'], 'fields': fields}
@@ -115,16 +159,13 @@ class NativeTable:
             elif token['type'] == 'DATA':
                 if block is None:
                     raise DomainError('NX DATA without FORMAT.')
-                values = token['body'].split('|')
-                if values and not values[0].strip():
-                    values.pop(0)
-                while len(values) > len(block['fields']) and not values[-1].strip():
-                    values.pop()
-                if len(values) != len(block['fields']):
-                    raise DomainError('NX DATA does not match FORMAT in ' + block['id'])
-                values = dict(zip(block['fields'], (v.strip() for v in values)))
-                if not values.get('LIBRF', values.get('NAME')):
+                values=_native_values(token['body'],block)
+                identifier='LIBRF' if 'LIBRF' in block['fields'] else 'NAME'
+                if not values[block['fields'].index(identifier)]:
                     raise DomainError('Empty native library identifier.')
+                self.row_count+=1
+                if schema_only:continue
+                values=dict(zip(block['fields'],values))
                 record = {'block_id': block['id'], 'class_name': block['class_name'], 'values': values}
                 self.records.append(record)
                 token['record'] = record
@@ -134,7 +175,16 @@ class NativeTable:
 
     @classmethod
     def read(cls, path):
-        return cls(decode(offline_path(path).read_bytes()))
+        path = offline_path(path)
+        try:
+            raw = path.read_bytes()
+        except FileNotFoundError as error:
+            raise DomainError('Native NX library file is missing.', 404) from error
+        except OSError as error:
+            raise DomainError('Native NX library file cannot be read.', 409) from error
+        table = cls(decode(raw))
+        table.source_sha256 = hashlib.sha256(raw).hexdigest()
+        return table
 
     def block(self, identifier):
         found = [b for b in self.blocks if b['id'] == identifier]
@@ -143,6 +193,7 @@ class NativeTable:
         return found[0]
 
     def groups(self):
+        if self.schema_only:raise DomainError('Schema-only reads do not contain object values.')
         groups = defaultdict(list)
         for record in self.records:
             groups[record['values'].get('LIBRF', record['values'].get('NAME'))].append(record)
@@ -203,6 +254,18 @@ def unchanged_baseline_records(current, old):
     return True
 
 
+def projection_block(record, source, target):
+    old = source.block(record['block_id'])
+    candidates = [b for b in target.blocks if b['class_name'] == old['class_name']
+                  and set(old['fields']) <= set(b['fields'])]
+    if len(candidates) > 1 and 'RTYPE' in record['values']:
+        candidates = [b for b in candidates if record['values']['RTYPE'] in {
+            r['values'].get('RTYPE') for r in target.records if r['block_id'] == b['id']}]
+    if len(candidates) != 1:
+        raise DomainError('Removed/renamed/ambiguous columns or class: ' + old['id'])
+    return candidates[0]
+
+
 def project_records(records, source, target, defaults=None):
     """Project by name; new columns require an explicit, per-block default.
 
@@ -211,15 +274,7 @@ def project_records(records, source, target, defaults=None):
     """
     defaults, result = defaults or {}, []
     for record in records:
-        old = source.block(record['block_id'])
-        candidates = [b for b in target.blocks if b['class_name'] == old['class_name']
-                      and set(old['fields']) <= set(b['fields'])]
-        if len(candidates) > 1 and 'RTYPE' in record['values']:
-            candidates = [b for b in candidates if record['values']['RTYPE'] in {
-                r['values'].get('RTYPE') for r in target.records if r['block_id'] == b['id']}]
-        if len(candidates) != 1:
-            raise DomainError('Removed/renamed/ambiguous columns or class: ' + old['id'])
-        new = candidates[0]
+        new = projection_block(record, source, target)
         values = dict(record['values'])
         for field in new['fields']:
             if field not in values:
@@ -295,9 +350,29 @@ def inventory(root):
 
 def safe_graphics_path(spec, filename):
     """Files go into Siemens' designated graphics dir, never graphics/managed."""
-    if not spec['graphics_dir'] or not re.fullmatch(r'[\w. -]{1,120}', filename):
+    if not spec['graphics_dir']:
         raise DomainError('No supported standard graphics destination for this library.')
+    asset_filename(filename)
     return str(PurePosixPath(spec['graphics_dir']) / filename)
+
+
+def graphics_bindings(resource,assets,spec):
+    bindings=resource.get('file_bindings') or []
+    if not bindings:return {asset['id']:safe_graphics_path(spec,asset['filename']) for asset in assets}
+    if not spec['graphics_dir']:raise DomainError('Library has no graphics destination.')
+    known={asset['id']:asset for asset in assets};result={};paths=set();prefix=spec['graphics_dir']+'/'
+    for item in bindings:
+        if set(item)!={'asset_id','path'} or item['asset_id'] not in known or item['asset_id'] in result:
+            raise DomainError('Invalid, duplicate or detached component binding.')
+        path=item['path']
+        if not isinstance(path,str) or not path.startswith(prefix):raise DomainError('Component must stay in its Siemens graphics directory.')
+        suffix=path[len(prefix):]
+        for component in suffix.split('/'):asset_filename(component)
+        if PurePosixPath(suffix).name!=known[item['asset_id']]['filename'] or not suffix.lower().endswith('.prt'):
+            raise DomainError('PRT component names cannot be changed by a filesystem binding.')
+        if path.casefold() in paths:raise DomainError('Case-colliding graphics component paths.')
+        paths.add(path.casefold());result[item['asset_id']]=path
+    return result
 
 
 def legacy_database(relative):
@@ -351,6 +426,48 @@ def cam_table(cam):
     return table
 
 
+def legacy_cam_table(cam):
+    """Use the same schema/ownership rules for the older single-row tool editor."""
+    if (set(cam) != {'class_name', 'values'} or not isinstance(cam['class_name'], str) or
+            not isinstance(cam['values'], dict) or not cam['values'].get('LIBRF')):
+        raise DomainError('Tools require class_name and values with a non-empty LIBRF.')
+    block = {'id': cam['class_name'] + ':1', 'class_name': cam['class_name'], 'fields': list(cam['values'])}
+    return cam_table({'library_id': 'tool-metric', 'nx_version': '', 'schemas': [block],
+                      'records': [{'block_id': block['id'], **cam}]})
+
+
+def validate_catalog_cam(resource):
+    """One structural/type contract for every writer, independent of approval.
+
+    File-package presence is not qualification: Store validates its paths,
+    attachments, hashes and human checks separately before the atomic save.
+    """
+    cam=resource.get('cam',{});kind=resource.get('kind')
+    if not isinstance(cam,dict):raise DomainError('CAM data must be a JSON object.')
+    # Validate, never cast: large integers and historical canonical bytes stay intact.
+    pending=[cam];seen=set()
+    while pending:
+        value=pending.pop()
+        if isinstance(value,float) and not math.isfinite(value):
+            raise DomainError('CAM data must contain only finite JSON numbers.')
+        if isinstance(value,(dict,list,tuple)):
+            identity=id(value)
+            if identity in seen:continue
+            seen.add(identity)
+            pending.extend(value.values() if isinstance(value,dict) else value)
+    if cam.get('library_id'):
+        try:cam_table(cam)
+        except (KeyError,TypeError,AttributeError,ValueError) as error:
+            raise DomainError('Invalid native CAM data structure.') from error
+        if spec_for(cam['library_id'])['kind']!=kind:
+            raise DomainError('Catalog kind and native NX library differ.')
+    elif resource.get('cam_status')=='approved':
+        if kind=='tool':legacy_cam_table(cam)
+        elif kind not in ('gauge','template','ui_standard'):
+            if kind not in ('machine','fixture') or cam or resource.get('file_package') is None:
+                raise DomainError('Approved native resources require a library-specific CAM record or a checked machine/fixture file package.')
+
+
 def geometry_check(resource, assets, nx_version=None):
     """A file extension is not evidence of a simulation-ready CAM tool."""
     if resource['kind'] not in ('tool', 'tool_assembly', 'inspection_tool'):
@@ -378,10 +495,43 @@ def geometry_check(resource, assets, nx_version=None):
         raise DomainError('Attached models require nx_cam preparation, not a parametric-only declaration.')
 
 
-def reference_report(root, standards=None, nx_version=None):
+def reference_targets(identifier):
+    """Relations depend on the library: PARTMAT is a description in part_materials.
+
+    These adapters follow the attribute descriptions in the installed Siemens
+    ASCII files. A familiar column name is not a relation in every database.
+    """
+    spec = spec_for(identifier)
+    unit = 'english' if identifier.endswith('-english') else 'metric'
+    prefix = 'cmm-' if identifier.startswith('cmm-') else ''
+    if spec['kind'] in ('tool', 'inspection_tool'):
+        return {'MATREF': prefix + 'tool_material', 'HLDREF': prefix + 'holder-' + unit,
+                'HOLDREF': prefix + 'holder-' + unit, 'SHAREF': 'shank-' + unit,
+                'SHANKREF': 'shank-' + unit, 'TPREF': prefix + 'trackpoint-' + unit}
+    if spec['kind'] == 'tool_assembly':
+        return {'TOOLREF': 'tool-' + unit, 'HOLDREF': prefix + 'holder-' + unit,
+                'SHANKREF': 'shank-' + unit, 'HLDREF': prefix + 'holder-' + unit,
+                'SHAREF': 'shank-' + unit}
+    if spec['kind'] == 'multitool':
+        return {'CUTTERLIBRF': 'tool-' + unit}
+    if spec['kind'] in ('feeds_speeds', 'machining_data', 'process_force'):
+        return {'PARTMAT': prefix + 'part_material', 'TOOLMAT': prefix + 'tool_material',
+                'OPERTYPE': prefix + 'cut_method'}
+    if spec['kind'] == 'tool_machining_data':
+        return {'PARTMAT': prefix + 'part_material', 'CUTMTD': prefix + 'cut_method'}
+    return {}
+
+
+def reference_report(root, standards=None, nx_version=None, table_overrides=None, complete_override=False,
+                     baseline_tables=None, include_candidates=False):
     """Check known relational fields. No dereferencing external/network paths."""
     tables, errors, warnings = {}, [], []
     for spec in SPECS.values():
+        if table_overrides and spec['id'] in table_overrides:
+            tables[spec['id']] = table_overrides[spec['id']]
+            continue
+        if complete_override:
+            continue
         path = offline_path(root / spec['path'])
         if path.is_file():
             try:
@@ -389,22 +539,21 @@ def reference_report(root, standards=None, nx_version=None):
             except DomainError as error:
                 errors.append({'library': spec['id'], 'reason': str(error)})
     group_index = {identifier: table.groups() for identifier, table in tables.items()}
+    candidate_cache = {}
+    baseline_index = {}
+    def baseline_groups(identifier):
+        if identifier not in baseline_index:
+            table = None
+            if baseline_tables is not None:
+                table = baseline_tables.get(identifier)
+            elif standards and nx_version in standards:
+                path = offline_path(standards[nx_version] / SPECS[identifier]['path'])
+                if path.is_file():table = NativeTable.read(path)
+            baseline_index[identifier] = table.groups() if table else {}
+        return baseline_index[identifier]
     for identifier, table in tables.items():
-        spec = SPECS[identifier]
-        unit = 'english' if identifier.endswith('-english') else 'metric'
-        prefix = 'cmm-' if identifier.startswith('cmm-') else ''
-        relations = {'TOOLREF': 'tool-' + unit, 'HOLDREF': prefix + 'holder-' + unit,
-                     'SHANKREF': 'shank-' + unit, 'CUTTERLIBRF': 'tool-' + unit,
-                     'HLDREF': prefix + 'holder-' + unit, 'SHAREF': 'shank-' + unit,
-                     'TPREF': prefix + 'trackpoint-' + unit,
-                     'MATREF': prefix + 'tool_material',
-                     'PARTMAT': prefix + 'part_material', 'TOOLMAT': prefix + 'tool_material',
-                     'OPERTYPE': prefix + 'cut_method', 'CUTMTD': prefix + 'cut_method'}
-        baseline = None
-        if standards and nx_version in standards:
-            path = offline_path(standards[nx_version] / spec['path'])
-            if path.is_file():
-                baseline = NativeTable.read(path).groups()
+        relations = reference_targets(identifier)
+        baseline = baseline_groups(identifier)
         for key, records in table.groups().items():
             unchanged = baseline and key in baseline and records_hash(records) == records_hash(baseline[key])
             for record in records:
@@ -412,8 +561,24 @@ def reference_report(root, standards=None, nx_version=None):
                     value = record['values'].get(field, '')
                     if value and (target not in tables or value not in group_index[target]):
                         entry = {'library': identifier, 'key': key, 'field': field, 'value': value,
-                                 'target': target, 'reason': 'Missing library reference.'}
-                        (warnings if unchanged else errors).append(entry)
+                                 'target': target, 'reason': 'Missing library reference.',
+                                 'standard_object': bool(unchanged)}
+                        # Downgrade only a defect present in the target stock,
+                        # not a valid stock relation broken by an omitted DB.
+                        stock_warning = unchanged and value not in baseline_groups(target)
+                        if include_candidates and not stock_warning:
+                            # Similar identifiers are suggestions, NEVER aliases.
+                            from difflib import SequenceMatcher
+                            candidates = group_index.get(target, {})
+                            closest = candidate_cache.get((target, value))
+                            if closest is None:
+                                closest = sorted(candidates, key=lambda k: (-SequenceMatcher(None, value, k).ratio(), k))[:20]
+                                candidate_cache[(target, value)] = closest
+                            entry['candidate_count'] = len(candidates)
+                            entry['candidates'] = [{'key': k, 'label': next((candidates[k][0]['values'][f]
+                                for f in ('MATNAM', 'MATNAME', 'DESCR', 'NAME') if candidates[k][0]['values'].get(f)), k)}
+                                for k in closest]
+                        (warnings if stock_warning else errors).append(entry)
     # Siemens' examples already contain many unresolved reference rows. Keep
     # them visible without returning megabytes of duplicate warning messages.
     summary = {}
@@ -427,10 +592,13 @@ def reference_report(root, standards=None, nx_version=None):
             'automatic_geometry_validation': False}
 
 
-def normalization_plan(source, standards, nx_version, legacy_version, defaults=None, resolutions=None, legacy_omissions=None):
+def normalization_plan(source, standards, nx_version, legacy_version, defaults=None, resolutions=None, legacy_omissions=None,
+                       source_version=None, reference_resolutions=None, include_target_libraries=False):
     """Read-only plan. Text results stay private; public report has fingerprints."""
     if nx_version not in standards or legacy_version not in standards:
         raise DomainError('Configure both target and original Siemens standard versions first.')
+    if source_version is not None and source_version not in (nx_version, legacy_version):
+        raise DomainError('Source version must identify the target or original standard version.')
     for identifier, blocks in (defaults or {}).items():
         spec_for(identifier)
         if not isinstance(blocks, dict) or any(not isinstance(fields, dict) for fields in blocks.values()):
@@ -481,19 +649,19 @@ def normalization_plan(source, standards, nx_version, legacy_version, defaults=N
             conflicts.append({'library': spec['id'], 'reason': 'Target Siemens standard database missing.'})
             continue
         target = NativeTable.read(standard_path)
-        inputs[str(standard_path)] = hashlib.sha256(standard_path.read_bytes()).hexdigest()
+        inputs[str(standard_path)] = target.source_sha256
         combined = copy.deepcopy(target)
         # First standard-location customer data, then former Henning-Dierk data.
         # A migrated source DB uses the target-version schema; the legacy DB
         # still uses the original version. Select a matching baseline by schema.
         for customer_path in [p for p in (source_path, legacy_path) if p and p.is_file()]:
             customer = NativeTable.read(customer_path)
-            inputs[str(customer_path)] = hashlib.sha256(customer_path.read_bytes()).hexdigest()
+            inputs[str(customer_path)] = customer.source_sha256
             baseline_path = offline_path(old_root / spec['path'])
             baseline = NativeTable.read(baseline_path) if baseline_path.is_file() else None
             if baseline:
-                inputs[str(baseline_path)] = hashlib.sha256(baseline_path.read_bytes()).hexdigest()
-            if customer_path == source_path and customer.blocks == target.blocks:
+                inputs[str(baseline_path)] = baseline.source_sha256
+            if customer_path == source_path and source_version != legacy_version and customer.blocks == target.blocks:
                 baseline = target
             relative = customer_path.relative_to(source).as_posix()
             groups, report = merge_tables(combined, customer, baseline,
@@ -505,8 +673,14 @@ def normalization_plan(source, standards, nx_version, legacy_version, defaults=N
                              for c in report['conflicts'])
             combined = NativeTable(combined.render(groups))
         outputs[spec['path']] = combined.text
+    from .references import normalization_references
+    outputs, references, applied = normalization_references(source, target_root, outputs, inputs,
+        reference_resolutions or {}, include_target_libraries)
+    conflicts.extend({**error, 'type': 'reference'} for error in references['errors'])
     return outputs, {'libraries': reports, 'conflicts': conflicts, 'can_import': not conflicts, 'input_hashes': inputs,
+                     'references': references, 'reference_resolutions': applied,
                      'target_version': nx_version, 'legacy_version': legacy_version,
+                     'source_version': source_version,
                      'explicit_legacy_omissions': legacy_omissions or [],
                      'optional_palette_omitted': OPTIONAL_PALETTE,
                      'result_hashes': {p: hashlib.sha256(t.encode('utf-8-sig')).hexdigest() for p, t in outputs.items()}}

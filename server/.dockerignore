@@ -3,6 +3,14 @@
 !Dockerfile
 !requirements-runtime.txt
 !nxserver/
-!nxserver/**
+!nxserver/**/
+!nxserver/**/*.py
+!nxserver/**/*.js
+!nxserver/**/*.html
+!nxserver/**/*.ps1
+!nxserver/**/*.psm1
+!nxserver/**/*.cmd
+!nxserver/web/vendor/LICENSE-*.txt
+!nxserver/web/vendor/provenance.json
 nxserver/**/__pycache__/
 nxserver/**/*.pyc

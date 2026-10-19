@@ -1,10 +1,15 @@
 """Conservative NX tool database reader/writer; never changes standard records."""
-from .safety import DomainError
+import hashlib
+
+from .safety import DomainError,offline_path
 
 
-def read_database(path):
+def read_database(path,expected_sha256=None):
+    path=offline_path(path)
     try:
         raw = path.read_bytes()
+        if expected_sha256 is not None and hashlib.sha256(raw).hexdigest()!=expected_sha256:
+            raise DomainError('Tool database differs from the managed manifest; import a new stand.',409)
         encoding = 'utf-16' if raw[:2] in (b'\xff\xfe', b'\xfe\xff') else 'utf-8-sig'
         text = raw.decode(encoding, errors='strict')
     except (UnicodeError, OSError) as error:
@@ -79,6 +84,6 @@ def append_tools(path, tools):
         output.append(line)
     if by_class or inserted != len(tools):
         raise DomainError('Class has no unique insertion boundary (#END_DATA).')
-    path.write_text('\n'.join(output) + '\n', encoding='utf-8-sig')
+    offline_path(path).write_text('\n'.join(output) + '\n', encoding='utf-8-sig')
     if len(read_database(path)[2]) != len(records) + inserted:
         raise DomainError('NX post-export validation failed.')

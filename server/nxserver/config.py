@@ -32,3 +32,20 @@ def startup(settings_file, host, environment=None):
     if erp == admin:
         raise DomainError('Admin and ERP tokens must be distinct.')
     return settings, admin, erp, generated
+
+
+def extraction_settings(store,settings):
+    import re
+    from .safety import disjoint
+    for version,configured in settings.get('installers',{}).items():
+        if not re.fullmatch(r'\d{4}',version) or set(configured)!={'path','sha256'} or not re.fullmatch(r'[a-f0-9]{64}',configured['sha256']):
+            raise DomainError('Installer settings require version -> path/SHA256.')
+        path=offline_path(configured['path']);disjoint(store.root,path)
+        store.installers[version]={**configured,'path':str(path)}
+    tool=settings.get('extractor')
+    if tool:
+        if set(tool)!={'kind','path','sha256'} or tool['kind']!='innounp' or not re.fullmatch(r'[a-f0-9]{64}',tool['sha256']):
+            raise DomainError('Extractor settings require an approved kind, path and SHA256.')
+        path=offline_path(tool['path']);disjoint(store.root,path)
+        if path.name.lower()!='innounp.exe':raise DomainError('Only the dedicated innounp archive reader is allowed.')
+        store.extractor={**tool,'path':str(path)}
