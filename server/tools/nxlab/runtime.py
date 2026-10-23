@@ -191,12 +191,12 @@ def persistence(directory,step):
             'resource_id':resource['id'],'job_id':geometry['id'],'result_id':prepared['id']}
 
 
-def run_owned(command,*,directory,environment,timeout=900):
+def run_owned(command,*,directory,environment,timeout=900,cwd=None):
     """Popen handle is owned here; never search, kill by name, or kill a PID tree."""
     directory=local(directory)
     from .processes import OwnedJob
     with local(directory/'nx.log').open('wb') as log, OwnedJob() as owned:
-        process=owned.start(command,cwd=directory,env=environment,stdout=log,stderr=subprocess.STDOUT)
+        process=owned.start(command,cwd=local(cwd) if cwd is not None else directory,env=environment,stdout=log,stderr=subprocess.STDOUT)
         try:
             code=process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:

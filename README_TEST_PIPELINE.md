@@ -125,7 +125,19 @@ Dadurch bleibt eine verschobene Schneide sichtbar, auch wenn Gesamtvolumen und
 äußere Gesamtabmessungen gleich bleiben. Eine physische Gegenprobe verschiebt
 die Fräserschneide um 2 mm innerhalb der unveränderten äußeren Halterabmessungen.
 
-Jeder Start verwendet ein eigenes Windows Job Object: vor Ausführung zugeordnet,
+Jeder automatische Werkzeug- und Gegenfall besitzt ein gemeinsames Ausführungsbudget
+von 15 Minuten. Ein separater Server-Python-Worker umfasst alle Modell-/Importstarts,
+HTTP-Anfragen und Mess-/Dateiprüfungen des Falls; einzelne Phasen erhalten dadurch
+kein neues 15-Minuten-Budget. Sein äußeres Windows Job Object schließt auch die
+verschachtelten NX-Jobs und den Testserver ein. Nach Ablauf werden nur diese eigenen
+Prozesse beendet; die Beendigung wird vor dem Fehlerbericht überprüft. Diese notwendige
+Aufräumprüfung kann über die Ausführungsfrist hinaus dauern. Eine CAM-Übergabe wird
+erst vom Controller nach bestätigtem Prozessende innerhalb des Budgets veröffentlicht.
+Unvollständige, abgebrochene oder verspätete Worker-Belege geben keine Übergabe frei.
+Aufgaben- und Ergebnisbytes sind per SHA-256 an Fall, Quellen und Isolationspolicy
+gebunden. Die spätere begleitete CAM-Abnahme hat kein automatisches Zeitlimit.
+
+Jeder NX-Start verwendet außerdem ein eigenes Windows Job Object: vor Ausführung zugeordnet,
 Kindprozesse eingeschlossen, keine Prozessnamensuche. Bei Timeout wird nur dieser
 Job beendet und dessen Ende geprüft. Die Benutzer-NX-Sitzung wird nicht beendet.
 

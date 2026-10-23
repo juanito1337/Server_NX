@@ -102,14 +102,94 @@ def phase(directory,task,installation,environment):
     return result
 
 
-def nx_cases(directory,profile,policy,summary):
-    # No NX installation read and no NX process until OS isolation is attested.
-    summary['isolation']=isolation(policy,profile['developer_sid'])
+def installation_for(profile):
+    if profile.get('schema_version')!=1 or profile.get('nx_version')!='2406':raise Blocked('Unsupported local profile.')
     installation=local(profile['installation'])
     if str(installation).replace('\\','/').casefold()!='c:/siemens/nx2406':raise Blocked('Only qualified NX2406 root is configured.')
     build=executable_version(installation/'NXBIN/ugraf.exe')
     if build!='2406.5001.0.0':raise Blocked('Unqualified NX build: '+build)
-    summary['nx_build']=build
+    return installation
+
+
+def positive_case(work,case,installation,environment,specs,baseline,baseline_root,source):
+    from tools.nxlab.cam_target import bind_handoff
+    identifier=case['id']
+    result={'id':case['id'],'status':'failed','directory':str(work)}
+    task={'case':case,'nx_version':'2406'}
+    created=phase(work/'create',{**task,'phase':'create'},installation,environment)
+    reference_measurement=phase(work/'reopen',{**task,'phase':'measure','part':created['generated']['reference']},installation,environment)
+    observed=reference_measurement['observed']
+    errors=compare(case,observed,specs['tolerances'])
+    if errors:raise AssertionError('Reopened reference differs: '+','.join(errors))
+    with Server(work/'server',sources={'nxlab':baseline_root}) as server:
+        release=server.request('/api/v1/releases','POST',{'source':'nxlab','nx_version':'2406',
+            'name':'NX lab '+identifier+' empty native target'})
+        resource,asset,job,package=seed(server,local(created['generated']['step']).read_bytes(),
+            tool_type=case['tool_type'],name='NX lab '+identifier)
+        package_dir=archive_to(package,work/'import')
+        run_owned([str(local(installation/'NXBIN/run_journal.exe')),str(package_dir/'nx_step_import.py')],
+                  directory=package_dir,environment=environment)
+        report=json.loads(local(package_dir/'output/report.json').read_text(encoding='utf-8'))
+        if report['status']!='needs_selection':raise AssertionError('STEP import did not preserve a usable assembly.')
+        server.request('/api/v1/geometry-jobs/'+job['id']+'/report','POST',{'report':report})
+        import_measurement=phase(work/'import-reopen',{**task,'phase':'measure','part':str(package_dir/'output/tool.prt')},
+                       installation,environment)
+        imported=import_measurement['observed']
+        imported_errors=compare(case,imported,specs['tolerances'])
+        # STEP translators may not preserve construction points. Such
+        # observations stay explicitly unverified for CAM acceptance.
+        unmeasured=[key for key in ('axis','mount_point','insert_direction') if key in imported_errors and key not in imported]
+        actual_errors=[key for key in imported_errors if key not in unmeasured]
+        if actual_errors:raise AssertionError('Reopened STEP import differs: '+','.join(actual_errors))
+        collector=server.request('/api/v1/geometry-jobs/'+job['id']+'/collector-package','POST',
+            {'root_library_id':'tool-metric','root_key':'NXTEST_'+identifier.upper()},binary=True)
+        archive_to(collector,work/'collector')
+        handoff=bind_handoff(case=case,source=source,baseline=baseline,release=release,
+            resource=resource,job=job,collector=work/'collector',collector_sha256=hashlib.sha256(collector).hexdigest(),
+            observed=observed,imported=imported)
+        handoff.update(server_data=str(server.data),settings=str(local(work/'server/settings.local.json')))
+        handoff['artifacts']={'created':created['artifacts'],'reopened':reference_measurement['artifacts'],
+            'import_reopened':import_measurement['artifacts']}
+        result.update(job_id=job['id'],resource_id=resource['id'],server_data=str(server.data),
+            target_release_id=release['id'],cam_handoff=str(work/'cam-handoff.json'),
+            artifacts=handoff['artifacts'],
+            reference_observed=observed,import_observed=imported,unmeasured=unmeasured,
+            status='awaiting_cam',message='Automatic geometry observed. Native CAM export, collector, server adoption and final NX reload still required.')
+    # Return a provisional context after this server is closed. Only the
+    # controller publishes it after whole-case process/budget verification.
+    handoff['server_closed']=True
+    return result,handoff
+
+
+def negative_case(work,fault,installation,environment,specs):
+    result={'id':fault['id'],'status':'failed','directory':str(work)}
+    task={'case':fault['generated'],'nx_version':'2406'}
+    created=phase(work/'create',{**task,'phase':'create'},installation,environment)
+    if fault['defect']=='missing_component':
+        original=local(work/'create/holder.prt')
+        original.rename(local(work/'create/holder.prt.retained'))
+    try:
+        observed=phase(work/'reopen',{**task,'phase':'measure','part':created['generated']['reference']},
+                       installation,environment)['observed']
+    except RuntimeError:
+        report_path=local(work/'reopen/result.json')
+        if not report_path.is_file():raise # No NX observation: infrastructure failure.
+        failed=json.loads(report_path.read_text(encoding='utf-8'))
+        message=failed.get('error','').lower()
+        expected_failure=(fault['defect']=='missing_component' and 'unloaded component' in message)
+        if not expected_failure:raise
+        result.update(status='passed',detected=['missing_component'],expected_defect=fault['defect'])
+    else:
+        errors=compare(fault['oracle'],observed,specs['tolerances'])
+        if not errors:raise AssertionError('Physical counterexample escaped the numerical oracle.')
+        result.update(status='passed',detected=errors,observed=observed,expected_defect=fault['defect'])
+    return result
+
+
+def nx_cases(directory,profile,policy,summary):
+    # No NX installation read and no NX process until OS isolation is attested.
+    summary['isolation']=isolation(policy,profile['developer_sid'])
+    installation=installation_for(profile);summary['nx_build']='2406.5001.0.0'
     environment=nx_environment(installation,directory/'runtime')
     specs=json.loads(local(SERVER/'tools/nxlab/fixtures.json').read_text(encoding='utf-8'))
     jobs_root=local('C:/NX_Migration/ToolJobs');jobs_root.mkdir(parents=True,exist_ok=True)
@@ -117,93 +197,25 @@ def nx_cases(directory,profile,policy,summary):
     preflight=phase(preflight_root,{'phase':'preflight','case':{'id':'nx-preflight'},'nx_version':'2406'},installation,environment)
     summary['cases'].append({'id':'nx-preflight','status':'passed','capabilities':preflight['capabilities'],
         'message':'Session/API preflight only; modeling, STEP and assembly licenses are exercised by the model phases.'})
-    from tools.nxlab.cam_target import prepare,bind_handoff
-    baseline_root=local(directory/'cam-target')
-    baseline=prepare(installation,baseline_root)
-    write(directory/'cam-target.json',baseline)
-    for case in specs['cases']:
-        started=time.monotonic();identifier=case['id']
-        result={'id':identifier,'status':'failed'};summary['cases'].append(result)
-        work=local(jobs_root/('lab-'+uuid.uuid4().hex[:12]));work.mkdir(exist_ok=False)
-        result['directory']=str(work)
-        try:
-            task={'case':case,'nx_version':'2406'}
-            created=phase(work/'create',{**task,'phase':'create'},installation,environment)
-            reference_measurement=phase(work/'reopen',{**task,'phase':'measure','part':created['generated']['reference']},installation,environment)
-            observed=reference_measurement['observed']
-            errors=compare(case,observed,specs['tolerances'])
-            if errors:raise AssertionError('Reopened reference differs: '+','.join(errors))
-            with Server(work/'server',sources={'nxlab':baseline_root}) as server:
-                release=server.request('/api/v1/releases','POST',{'source':'nxlab','nx_version':'2406',
-                    'name':'NX lab '+identifier+' empty native target'})
-                resource,asset,job,package=seed(server,local(created['generated']['step']).read_bytes(),
-                    tool_type=case['tool_type'],name='NX lab '+identifier)
-                package_dir=archive_to(package,work/'import')
-                run_owned([str(local(installation/'NXBIN/run_journal.exe')),str(package_dir/'nx_step_import.py')],
-                          directory=package_dir,environment=environment)
-                report=json.loads(local(package_dir/'output/report.json').read_text(encoding='utf-8'))
-                if report['status']!='needs_selection':raise AssertionError('STEP import did not preserve a usable assembly.')
-                server.request('/api/v1/geometry-jobs/'+job['id']+'/report','POST',{'report':report})
-                import_measurement=phase(work/'import-reopen',{**task,'phase':'measure','part':str(package_dir/'output/tool.prt')},
-                               installation,environment)
-                imported=import_measurement['observed']
-                imported_errors=compare(case,imported,specs['tolerances'])
-                # STEP translators may not preserve construction points. Such
-                # observations stay explicitly unverified for CAM acceptance.
-                unmeasured=[key for key in ('axis','mount_point','insert_direction') if key in imported_errors and key not in imported]
-                actual_errors=[key for key in imported_errors if key not in unmeasured]
-                if actual_errors:raise AssertionError('Reopened STEP import differs: '+','.join(actual_errors))
-                collector=server.request('/api/v1/geometry-jobs/'+job['id']+'/collector-package','POST',
-                    {'root_library_id':'tool-metric','root_key':'NXTEST_'+identifier.upper()},binary=True)
-                archive_to(collector,work/'collector')
-                handoff=bind_handoff(case=case,source=summary['source'],baseline=baseline,release=release,
-                    resource=resource,job=job,collector=work/'collector',collector_sha256=hashlib.sha256(collector).hexdigest(),
-                    observed=observed,imported=imported)
-                handoff.update(server_data=str(server.data),settings=str(local(work/'server/settings.local.json')))
-                handoff['artifacts']={'created':created['artifacts'],'reopened':reference_measurement['artifacts'],
-                    'import_reopened':import_measurement['artifacts']}
-                result.update(job_id=job['id'],resource_id=resource['id'],server_data=str(server.data),
-                    target_release_id=release['id'],cam_handoff=str(work/'cam-handoff.json'),
-                    artifacts=handoff['artifacts'],
-                    reference_observed=observed,import_observed=imported,unmeasured=unmeasured,
-                    status='awaiting_cam',message='Automatic geometry observed. Native CAM export, collector, server adoption and final NX reload still required.')
-            # Publish a resumable context only after this exact owned server
-            # handle has terminated. A timeout never becomes a closed marker.
-            handoff['server_closed']=True
-            write(work/'cam-handoff.json',handoff)
-        except Exception as error:result['message']=str(error);raise
-        finally:result['seconds']=round(time.monotonic()-started,3)
-    # Only after all positive cases were observed: a license/startup error must
-    # never masquerade as a successful negative geometry test.
+    from tools.nxlab.cam_target import prepare
+    from tools.nxlab.cases import CASE_SECONDS,supervise
     from tools.nxlab.faults import counterexamples
-    for fault in counterexamples(specs):
-        started=time.monotonic();result={'id':fault['id'],'status':'failed'}
-        summary['cases'].append(result)
-        work=local(jobs_root/('fault-'+uuid.uuid4().hex[:12]));work.mkdir(exist_ok=False)
-        result['directory']=str(work)
-        try:
-            task={'case':fault['generated'],'nx_version':'2406'}
-            created=phase(work/'create',{**task,'phase':'create'},installation,environment)
-            if fault['defect']=='missing_component':
-                original=local(work/'create/holder.prt')
-                original.rename(local(work/'create/holder.prt.retained'))
+    baseline_root=local(directory/'cam-target');baseline=prepare(installation,baseline_root)
+    write(directory/'cam-target.json',baseline)
+    # All positives finish before any physical counterexample starts. A failed
+    # license/API preflight cannot be mistaken for a detected geometry defect.
+    for kind,items in [('positive',specs['cases']),('negative',counterexamples(specs))]:
+        for item in items:
+            started=time.monotonic();identifier=item['id']
+            result={'id':identifier,'status':'failed','execution_limit_seconds':CASE_SECONDS};summary['cases'].append(result)
+            work=local(jobs_root/(('lab-' if kind=='positive' else 'fault-')+uuid.uuid4().hex[:12]));work.mkdir(exist_ok=False)
+            result['directory']=str(work)
             try:
-                observed=phase(work/'reopen',{**task,'phase':'measure','part':created['generated']['reference']},
-                               installation,environment)['observed']
-            except RuntimeError:
-                report_path=local(work/'reopen/result.json')
-                if not report_path.is_file():raise # No NX observation: infrastructure failure.
-                failed=json.loads(report_path.read_text(encoding='utf-8'))
-                message=failed.get('error','').lower()
-                expected_failure=(fault['defect']=='missing_component' and 'unloaded component' in message)
-                if not expected_failure:raise
-                result.update(status='passed',detected=['missing_component'],expected_defect=fault['defect'])
-            else:
-                errors=compare(fault['oracle'],observed,specs['tolerances'])
-                if not errors:raise AssertionError('Physical counterexample escaped the numerical oracle.')
-                result.update(status='passed',detected=errors,observed=observed,expected_defect=fault['defect'])
-        except Exception as error:result['message']=str(error);raise
-        finally:result['seconds']=round(time.monotonic()-started,3)
+                result.update(supervise(work,case_id=identifier,kind=kind,profile=profile,policy=policy,
+                    source=summary['source'],baseline=baseline,baseline_root=baseline_root,environment=environment,started=started))
+            except Blocked as error:result.update(status='blocked',message=str(error));raise
+            except Exception as error:result['message']=str(error);raise
+            finally:result['seconds']=round(time.monotonic()-started,3)
 
 
 def main(arguments=None):
