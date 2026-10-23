@@ -75,7 +75,7 @@ def select_ids(nodeids, suite, shard_index, shard_count):
 def test_environment(environment, suite):
     # Never inherit local NX opt-ins, credentials, pytest selection or plugins.
     result = {key: value for key, value in environment.items()
-              if not key.upper().startswith(('NX_', 'UGII_', 'UGCAM_', 'GIT_', 'NODE_')) and key not in
+              if not key.upper().startswith(('NX_', 'UGII_', 'UGCAM_', 'GIT_', 'NODE_', 'PSMODULE')) and key not in
               ('PYTEST_ADDOPTS', 'PYTEST_PLUGINS', 'PYTHONPATH')}
     result.update(PYTHONIOENCODING='utf-8', PYTHONUNBUFFERED='1',
                   PYTEST_DISABLE_PLUGIN_AUTOLOAD='1', GIT_CONFIG_NOSYSTEM='1',

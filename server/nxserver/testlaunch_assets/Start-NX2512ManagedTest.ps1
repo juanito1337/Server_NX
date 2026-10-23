@@ -28,7 +28,7 @@ foreach ($entry in $config.Files) {
     $path = Join-Path $stage $entry.RelativePath
     Assert-NXOfflinePath -Path $path
     if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path -Force).Length -ne $entry.Size -or
-        (Get-FileHash -LiteralPath $path).Hash -ne $entry.Sha256) { throw "Staging changed: $($entry.RelativePath)" }
+        (Get-NXFileHash -LiteralPath $path).Hash -ne $entry.Sha256) { throw "Staging changed: $($entry.RelativePath)" }
     $checkedFiles++
     if ($checkedFiles % 250 -eq 0 -or $checkedFiles -eq $config.Files.Count) {
         Write-Host "[INFO] Verified $checkedFiles / $($config.Files.Count) files."
@@ -41,7 +41,7 @@ if ($actualFiles.Count -ne $config.Files.Count) { throw 'Additional or missing s
 foreach ($entry in $config.ConfigurationFiles) {
     Assert-NXOfflinePath -Path $entry.Path
     if (-not ([System.IO.Path]::GetFullPath($entry.Path)).StartsWith(([System.IO.Path]::GetFullPath($test).TrimEnd('\') + '\'), [System.StringComparison]::OrdinalIgnoreCase)) { throw 'Configuration files must stay inside the separate test directory.' }
-    if ((Get-FileHash -LiteralPath $entry.Path).Hash -ne $entry.Sha256) { throw "Test configuration changed: $($entry.Path)" }
+    if ((Get-NXFileHash -LiteralPath $entry.Path).Hash -ne $entry.Sha256) { throw "Test configuration changed: $($entry.Path)" }
 }
 Write-Host '[OK] Complete staging and test configuration SHA-256 checks passed.'
 $uiProfile=$null

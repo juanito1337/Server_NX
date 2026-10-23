@@ -151,7 +151,7 @@ if ($validationEntries.Count -ne $expectedCount) {
     throw "Die erzeugte PAX enthaelt $($validationEntries.Count) statt $expectedCount Eintraege."
 }
 
-$hash = (Get-FileHash -LiteralPath $outputFullPath -Algorithm SHA256).Hash
+$hash = (Get-NXFileHash -LiteralPath $outputFullPath -Algorithm SHA256).Hash
 Write-Host "[OK] NX2512-Standardvorlagen: $($systemEntries.Count)"
 Write-Host "[OK] Migrierte Kundenmaschinen: $($customEntries.Count)"
 Write-Host "[OK] Zusammengefuehrte PAX: $outputFullPath"

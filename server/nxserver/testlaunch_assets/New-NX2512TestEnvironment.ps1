@@ -39,7 +39,7 @@ $files = @(Get-ChildItem -LiteralPath $stage -Recurse -File -Force | Where-Objec
 $checkedFiles = 0
 Write-Host "[INFO] Preparing SHA-256 manifest of $($files.Count) files. This can take several minutes."
 $manifest = @($files | ForEach-Object {
-    [pscustomobject]@{ RelativePath = $_.FullName.Substring($stage.Length + 1); Size = $_.Length; Sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+    [pscustomobject]@{ RelativePath = $_.FullName.Substring($stage.Length + 1); Size = $_.Length; Sha256 = (Get-NXFileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
     $checkedFiles++
     if ($checkedFiles % 250 -eq 0 -or $checkedFiles -eq $files.Count) { Write-Host "[INFO] Prepared $checkedFiles / $($files.Count) files." }
 })
@@ -77,8 +77,8 @@ $config = [ordered]@{
     SchemaVersion = 1; NXInstallRoot = $install; StagingRoot = $stage; TestRoot = $output; IncludeStagingMarker = $includeMarker
     Files = $manifest
     ConfigurationFiles = @(
-        [pscustomobject]@{ Path = $customDirs; Sha256 = (Get-FileHash -LiteralPath $customDirs).Hash },
-        [pscustomobject]@{ Path = $palette; Sha256 = (Get-FileHash -LiteralPath $palette).Hash }
+        [pscustomobject]@{ Path = $customDirs; Sha256 = (Get-NXFileHash -LiteralPath $customDirs).Hash },
+        [pscustomobject]@{ Path = $palette; Sha256 = (Get-NXFileHash -LiteralPath $palette).Hash }
     )
 }
 $configPath = Join-Path $output 'test_environment.json'

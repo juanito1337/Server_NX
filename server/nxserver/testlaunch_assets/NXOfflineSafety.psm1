@@ -5,6 +5,12 @@ function Assert-NXOfflinePath {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Path, [string]$Label = 'Path', [switch]$ReferenceOnly)
 
+    $lexical = $Path.Replace('/', '\')
+    if ($Path -cne $Path.Trim() -or $lexical -match '(?i)^W:($|[^\\])' -or
+        (-not $ReferenceOnly -and $lexical -match '(?i)^(W:|\\\\)')) {
+        if ($lexical -match '(?i)^W:') { throw "$Label points to the protected production directory." }
+        throw "$Label must be a local offline path, not W: or a UNC share."
+    }
     $full = [System.IO.Path]::GetFullPath($Path).Replace('/', '\').TrimEnd('\')
     if ($full -match '(?i)(^W:\\SIEMENSSHARE\\NX2406($|\\)|\\SIEMENSSHARE\\NX2406($|\\))') {
         throw "$Label points to the protected production directory."
@@ -170,11 +176,50 @@ function Assert-NXTreeNoReparsePoint {
     }
 }
 
+function Get-NXFileHash {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$LiteralPath, [ValidateSet('SHA256')][string]$Algorithm = 'SHA256')
+    Assert-NXOfflinePath -Path $LiteralPath
+    $stream = $null; $hash = $null
+    try {
+        $stream = [System.IO.File]::Open($LiteralPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+        $hash = [System.Security.Cryptography.SHA256]::Create()
+        return [pscustomobject]@{ Algorithm = 'SHA256'; Hash = [System.BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', ''); Path = [System.IO.Path]::GetFullPath($LiteralPath) }
+    }
+    finally {
+        if ($null -ne $hash) { $hash.Dispose() }
+        if ($null -ne $stream) { $stream.Dispose() }
+    }
+}
+
+function Resolve-NXOfflineExecutable {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$FilePath, [AllowEmptyString()][string]$SearchPath = $env:PATH)
+    if ($FilePath -match '^[A-Za-z]:[\\/]') {
+        Assert-NXOfflinePath -Path $FilePath
+        if (-not (Test-Path -LiteralPath $FilePath -PathType Leaf)) { throw 'Local executable does not exist.' }
+        return [System.IO.Path]::GetFullPath($FilePath)
+    }
+    if ($FilePath -notmatch '^[A-Za-z0-9_][A-Za-z0-9_. -]*$') {
+        throw 'Executable must be an ordinary basename or an absolute local path, never W: or UNC.'
+    }
+    # Get-Command can return multiple ApplicationInfo objects for the same
+    # basename. Resolve the first verified PATH entry without searching unsafe
+    # entries, and return exactly one absolute string.
+    $safePath = Get-NXOfflineSearchPath -InheritedPath $SearchPath
+    foreach ($directory in @($safePath -split ';')) {
+        $candidate = Join-Path $directory $FilePath
+        Assert-NXOfflinePath -Path $candidate
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return [System.IO.Path]::GetFullPath($candidate) }
+    }
+    throw "No verified local executable was found: $FilePath"
+}
+
 function Invoke-NXExternalProcess {
     param([Parameter(Mandatory)][string]$FilePath, [string[]]$Arguments = @(), [string]$WorkingDirectory = (Get-Location).Path)
-    $executable = (Get-Command $FilePath -CommandType Application -ErrorAction Stop).Source
-    Assert-NXOfflinePath -Path $executable
     Assert-NXOfflinePath -Path $WorkingDirectory
+    $executable = Resolve-NXOfflineExecutable -FilePath $FilePath
+    $safePath = Get-NXOfflineSearchPath -PreferredDirectories @([System.IO.Path]::GetDirectoryName($executable)) -InheritedPath $env:PATH
     $quoted = foreach ($argument in $Arguments) {
         $escaped = [regex]::Replace($argument, '(\\*)"', '$1$1\"')
         $escaped = [regex]::Replace($escaped, '(\\+)$', '$1$1')
@@ -187,6 +232,7 @@ function Invoke-NXExternalProcess {
     $process.StartInfo.UseShellExecute = $false
     $process.StartInfo.RedirectStandardOutput = $true
     $process.StartInfo.RedirectStandardError = $true
+    $process.StartInfo.EnvironmentVariables['PATH'] = $safePath
     try {
         [void]$process.Start()
         $stdout = $process.StandardOutput.ReadToEndAsync()
@@ -199,4 +245,4 @@ function Invoke-NXExternalProcess {
     finally { $process.Dispose() }
 }
 
-Export-ModuleMember -Function Assert-NXOfflinePath, Assert-NXDisjointPaths, Assert-NXTreeNoReparsePoint, Invoke-NXExternalProcess, Get-NXOfflineSearchPath, Get-NXInstallationVersionMetadata
+Export-ModuleMember -Function Assert-NXOfflinePath, Assert-NXDisjointPaths, Assert-NXTreeNoReparsePoint, Invoke-NXExternalProcess, Get-NXOfflineSearchPath, Get-NXInstallationVersionMetadata, Resolve-NXOfflineExecutable, Get-NXFileHash

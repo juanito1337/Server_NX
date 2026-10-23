@@ -53,6 +53,7 @@ def test_environment_never_inherits_local_keys_or_licensed_optins(suite):
     source.update(GIT_DIR='W:/never-look-up',GIT_CONFIG_GLOBAL='W:/never-read',
                   NODE_OPTIONS='--require W:/never-load.js',NODE_PATH='W:/never-search',
                   UGII_BASE_DIR='W:/never-inspect',UGCAM_LIBRARY_PATH='W:/never-inherit')
+    source.update(PSModulePath='W:/never-import',PSModuleAnalysisCachePath='W:/never-cache')
     result = ci.test_environment(source, suite)
     assert result['KEEP_ME'] == 'yes' and source['NX_ADMIN_TOKEN'] == 'synthetic-not-a-live-key'
     expected = {'NX_BROWSER_TEST': '1'} if suite == 'browser' else {'NX_DOCKER_TEST': '1'} if suite == 'container' else {}
@@ -62,6 +63,7 @@ def test_environment_never_inherits_local_keys_or_licensed_optins(suite):
     assert result['GIT_CONFIG_GLOBAL']==os.devnull and result['GIT_CONFIG_NOSYSTEM']=='1'
     assert not any(key.upper().startswith(('NODE_','UGII_','UGCAM_')) for key in result)
     assert 'GIT_DIR' not in result and 'W:' not in str(result)
+    assert not any(key.upper().startswith('PSMODULE') for key in result)
 
 
 def prepared(tmp_path, ids=('tests/test_one.py::test_one',)):

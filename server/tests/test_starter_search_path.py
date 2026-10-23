@@ -1,5 +1,6 @@
 """PATH isolation; forbidden paths are data, never the test process environment."""
 import json
+import hashlib
 import os
 import subprocess
 from pathlib import Path
@@ -37,6 +38,75 @@ $result=Get-NXOfflineSearchPath -PreferredDirectories @((ConvertFrom-Json $Prefe
 def search(preferred, inherited):
     return run_ps(INVOKE, ModulePath=ASSETS / 'NXOfflineSafety.psm1',
         Preferred=json.dumps([str(path) for path in preferred]), Inherited=inherited)
+
+
+@WINDOWS
+@pytest.mark.parametrize('executable,search_path',[
+    (r'W:\never-read\probe.exe',''),(r'w:relative.exe',''),
+    (r'\\never-read\share\probe.exe',''),(r'\\?\W:\never-read\probe.exe',''),
+    ('probe.exe',r'W:\never-read;\\never-read\share;relative;C:relative')])
+def test_executable_resolution_rejects_protected_text_before_lookup(executable,search_path):
+    source=r'''
+    param([string]$ModulePath,[string]$Executable,[string]$Search)
+    $ErrorActionPreference='Stop'
+    Import-Module $ModulePath -Force
+    function global:Test-Path { throw 'Unexpected filesystem lookup' }
+    function global:Get-Item { throw 'Unexpected filesystem lookup' }
+    function global:Get-ChildItem { throw 'Unexpected filesystem lookup' }
+    try { Resolve-NXOfflineExecutable -FilePath $Executable -SearchPath $Search; exit 7 }
+    catch { if ($_.Exception.Message -like '*Unexpected filesystem*') { throw }; Write-Output 'REJECTED_BEFORE_LOOKUP' }
+    '''
+    result=run_ps(source,ModulePath=ASSETS/'NXOfflineSafety.psm1',Executable=executable,Search=search_path)
+    assert result.returncode==0 and 'REJECTED_BEFORE_LOOKUP' in result.stdout,result.stdout+result.stderr
+
+
+@WINDOWS
+def test_executable_resolution_returns_one_first_match_without_changing_parent_path(tmp_path):
+    first=tmp_path/'first';second=tmp_path/'second';first.mkdir();second.mkdir()
+    for folder in (first,second):(folder/'probe.exe').write_bytes(b'Inert; never executed by this resolution test.')
+    source=r'''
+    param([string]$ModulePath,[string]$Search)
+    $ErrorActionPreference='Stop';Import-Module $ModulePath -Force
+    $before=$env:PATH;$resolved=Resolve-NXOfflineExecutable -FilePath 'probe.exe' -SearchPath $Search
+    [pscustomobject]@{executable=$resolved;is_string=($resolved -is [string]);parent_unchanged=($env:PATH -ceq $before)} | ConvertTo-Json -Compress
+    '''
+    result=run_ps(source,ModulePath=ASSETS/'NXOfflineSafety.psm1',Search=str(first)+';'+str(second))
+    assert result.returncode==0,result.stdout+result.stderr
+    value=json.loads(result.stdout);assert value=={'executable':str(first/'probe.exe'),'is_string':True,'parent_unchanged':True}
+
+
+@WINDOWS
+@pytest.mark.parametrize('content',[b'',bytes(range(256))*4096],ids=['empty','streaming'])
+def test_native_hash_does_not_depend_on_host_filehash_cmdlet_and_releases_handle(tmp_path,content):
+    path=tmp_path/'hash input $probe.bin';path.write_bytes(content)
+    source=r'''
+    param([string]$ModulePath,[string]$InputFile)
+    $ErrorActionPreference='Stop';Import-Module $ModulePath -Force
+    function global:Get-FileHash { throw 'Host hashing cmdlet must not be used' }
+    $result=Get-NXFileHash -LiteralPath $InputFile -Algorithm SHA256
+    $exclusive=[System.IO.File]::Open($InputFile,[System.IO.FileMode]::Open,[System.IO.FileAccess]::ReadWrite,[System.IO.FileShare]::None)
+    $exclusive.Dispose();$result | ConvertTo-Json -Compress
+    '''
+    result=run_ps(source,ModulePath=ASSETS/'NXOfflineSafety.psm1',InputFile=path)
+    assert result.returncode==0,result.stdout+result.stderr
+    assert json.loads(result.stdout)['Hash']==hashlib.sha256(content).hexdigest().upper()
+    assert path.read_bytes()==content
+
+
+@WINDOWS
+@pytest.mark.parametrize('value',[r'W:\never-read\hash.bin',r'w:relative.bin',r'\\never-read\share\hash.bin'])
+def test_native_hash_rejects_protected_text_before_any_lookup(value):
+    source=r'''
+    param([string]$ModulePath,[string]$InputFile)
+    $ErrorActionPreference='Stop';Import-Module $ModulePath -Force
+    function global:Test-Path { throw 'Unexpected filesystem lookup' }
+    function global:Get-Item { throw 'Unexpected filesystem lookup' }
+    function global:Get-ChildItem { throw 'Unexpected filesystem lookup' }
+    try { Get-NXFileHash -LiteralPath $InputFile; exit 7 }
+    catch { if ($_.Exception.Message -like '*Unexpected filesystem*') { throw }; Write-Output 'REJECTED_BEFORE_LOOKUP' }
+    '''
+    result=run_ps(source,ModulePath=ASSETS/'NXOfflineSafety.psm1',InputFile=value)
+    assert result.returncode==0 and 'REJECTED_BEFORE_LOOKUP' in result.stdout,result.stdout+result.stderr
 
 
 @WINDOWS

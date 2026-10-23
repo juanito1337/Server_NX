@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 
 import pytest
 
@@ -62,3 +63,15 @@ def test_unapproved_inherited_host_is_rejected_before_even_context_inspection(tm
     result,log,state,project=run_endpoint_probe(tmp_path,docker_probe,'npipe:////./pipe/dockerDesktopLinuxEngine',action,True,host)
     assert result.returncode==1 and 'DOCKER_HOST' in result.stdout+result.stderr
     assert not log.exists() and not state.exists() and not (project/'docker').exists()
+
+
+@pytest.mark.parametrize('action',['Stop','Status','Config'])
+def test_multiple_local_docker_binaries_do_not_turn_resolution_into_an_array(tmp_path,docker_probe,monkeypatch,action):
+    second=tmp_path/'second-local-cli';second.mkdir();shutil.copyfile(docker_probe,second/'docker.exe')
+    # Both executables are our inert compiled stand-in. The actual installed
+    # Docker CLI is excluded, so even an incorrect selection cannot reach it.
+    monkeypatch.setenv('PATH',str(second)+os.pathsep+r'C:\Windows\System32')
+    result,log,state,project=run_endpoint_probe(tmp_path,docker_probe,'npipe:////./pipe/docker_engine',action)
+    assert result.returncode==0,result.stdout+result.stderr
+    assert len(log.read_text(encoding='utf-8').splitlines())==4 and state.exists()
+    assert not (project/'docker').exists()

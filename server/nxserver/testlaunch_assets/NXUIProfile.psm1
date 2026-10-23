@@ -13,7 +13,7 @@ function Get-NXUIRolePath {
     if ($rows.Count -ne 1 -or $rows[0].Size -ne $UIProfile.size -or $rows[0].Sha256 -ine $UIProfile.sha256) { throw 'UI role differs from release manifest.' }
     $role=Join-Path $StagingRoot $relative.Replace('/','\')
     Assert-NXOfflinePath -Path $role
-    if (-not (Test-Path -LiteralPath $role -PathType Leaf) -or (Get-Item -LiteralPath $role -Force).Length -ne $UIProfile.size -or (Get-FileHash -LiteralPath $role -Algorithm SHA256).Hash -ine $UIProfile.sha256) { throw 'Selected UI role changed.' }
+    if (-not (Test-Path -LiteralPath $role -PathType Leaf) -or (Get-Item -LiteralPath $role -Force).Length -ne $UIProfile.size -or (Get-NXFileHash -LiteralPath $role -Algorithm SHA256).Hash -ine $UIProfile.sha256) { throw 'Selected UI role changed.' }
     return $role
 }
 Export-ModuleMember -Function Get-NXUIRolePath

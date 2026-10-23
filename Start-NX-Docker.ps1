@@ -14,11 +14,13 @@ $validatedComposePath = $null
 $validatedComposePrefix = $null
 $composeEnvironment = @{}
 $dockerConnectionArguments = @()
+$dockerExecutable = $null
+$dockerSearchPath = $null
 
 function Get-DockerOutput {
     param([string[]]$Arguments)
-    $executable = (Get-Command docker.exe -CommandType Application -ErrorAction Stop).Source
-    Assert-NXOfflinePath -Path $executable
+    if (-not $dockerExecutable) { throw 'Kein geprueftes lokales Docker-Programm vorhanden.' }
+    $executable = $dockerExecutable
     $dockerArguments = $dockerConnectionArguments + $Arguments
     $quoted = foreach ($argument in $dockerArguments) {
         $escaped = [regex]::Replace($argument, '(\\*)"', '$1$1\"')
@@ -34,6 +36,7 @@ function Get-DockerOutput {
     $process.StartInfo.RedirectStandardError = $true
     $process.StartInfo.StandardOutputEncoding = New-Object System.Text.UTF8Encoding($false)
     foreach ($name in $composeEnvironment.Keys) { $process.StartInfo.EnvironmentVariables[$name] = $composeEnvironment[$name] }
+    $process.StartInfo.EnvironmentVariables['PATH'] = $dockerSearchPath
     try {
         [void]$process.Start()
         $stdout = $process.StandardOutput.ReadToEndAsync()
@@ -50,7 +53,7 @@ function Invoke-Compose {
     if (-not $validatedComposeFile -or $dockerConnectionArguments.Count -ne 2) { throw 'Kein gepruefter lokaler Docker-Ausfuehrungsplan vorhanden.' }
     # Feed the same approved plan for every action. Original YAML/.env changes
     # after validation must not alter the configuration used by Compose.
-    $code = Invoke-NXExternalProcess -FilePath 'docker.exe' -Arguments ($dockerConnectionArguments + $validatedComposePrefix + $Arguments) -WorkingDirectory $PSScriptRoot
+    $code = Invoke-NXExternalProcess -FilePath $dockerExecutable -Arguments ($dockerConnectionArguments + $validatedComposePrefix + $Arguments) -WorkingDirectory $PSScriptRoot
     if ($code -ne 0) { throw "Docker Compose ist fehlgeschlagen (Exit $code)." }
 }
 
@@ -71,13 +74,13 @@ function Read-UpgradeInputs {
 }
 
 try {
-    if (-not (Get-Command docker.exe -CommandType Application -ErrorAction SilentlyContinue)) {
-        throw 'Docker Desktop mit Linux-Containern und Docker Compose wird benoetigt. Docker ist hier nicht installiert/verfuegbar; es wird nichts automatisch installiert.'
-    }
     Assert-NXOfflinePath -Path $PSScriptRoot -Label 'Projektordner'
     if ($env:DOCKER_HOST -and $env:DOCKER_HOST -notmatch '^npipe:////\./pipe/(docker_engine|dockerDesktopLinuxEngine)$') {
         throw 'DOCKER_HOST darf fuer diesen Starter nur auf eine lokale Docker-Desktop Pipe zeigen.'
     }
+    $dockerSearchPath = Get-NXOfflineSearchPath -InheritedPath $env:PATH
+    try { $dockerExecutable = Resolve-NXOfflineExecutable -FilePath 'docker.exe' -SearchPath $dockerSearchPath }
+    catch { throw ('Docker Desktop mit Linux-Containern und Docker Compose wird benoetigt; kein geprueftes lokales Programm vorhanden. ' + $_.Exception.Message) }
     $contextName = Get-DockerOutput -Arguments @('context', 'show')
     $endpoint = Get-DockerOutput -Arguments @('context', 'inspect', $contextName, '--format', '{{.Endpoints.docker.Host}}')
     if ($endpoint -notmatch '^npipe:////\./pipe/(docker_engine|dockerDesktopLinuxEngine)$') {

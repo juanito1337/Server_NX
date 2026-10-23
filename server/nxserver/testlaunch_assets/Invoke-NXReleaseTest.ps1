@@ -20,11 +20,11 @@ foreach ($entry in $package.ScriptHashes.PSObject.Properties) {
     if ($entry.Name -notmatch '^[A-Za-z0-9_-]+\.(ps1|psm1|cmd)$') { throw 'Unsafe package script name.' }
     $file = Join-Path $PSScriptRoot $entry.Name
     Assert-NXOfflinePath -Path $file
-    if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $entry.Value) { throw "Package script changed: $($entry.Name)" }
+    if ((Get-NXFileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $entry.Value) { throw "Package script changed: $($entry.Name)" }
 }
 $manifestPath = Join-Path $PSScriptRoot 'release_manifest.json'
 Assert-NXOfflinePath -Path $manifestPath
-if ((Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -ne $package.ManifestSha256) { throw 'Package release manifest changed.' }
+if ((Get-NXFileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash -ne $package.ManifestSha256) { throw 'Package release manifest changed.' }
 $uiProfile=$null
 if ($null -ne $package.PSObject.Properties['UIProfile']) { $uiProfile=$package.UIProfile }
 if ([string]::IsNullOrWhiteSpace($StagingRoot)) { $StagingRoot = [string]$package.StagingRoot }
@@ -62,11 +62,11 @@ if (Test-Path -LiteralPath $TestRoot) {
     if ($null -ne $stored.PSObject.Properties['UIProfileJson']) { $storedUI=[string]$stored.UIProfileJson }
     if ($storedUI -cne $requestedUI) { throw 'Existing test directory belongs to another UI-role selection. Use a new directory.' }
     foreach ($key in $binding.Keys) { if ($stored.$key -cne $binding[$key]) { throw 'Existing test directory belongs to another release/path. Nothing was overwritten.' } }
-    if ((Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash -ne $stored.ConfigSha256) { throw 'Test configuration changed outside the package.' }
+    if ((Get-NXFileHash -LiteralPath $configPath -Algorithm SHA256).Hash -ne $stored.ConfigSha256) { throw 'Test configuration changed outside the package.' }
 }
 else {
     & (Join-Path $PSScriptRoot 'New-NX2512TestEnvironment.ps1') -StagingRoot $StagingRoot -NXInstallRoot $NXInstallRoot -OutputRoot $TestRoot -ReleaseManifestPath $manifestPath -UIProfile $uiProfile
-    $binding['ConfigSha256'] = (Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash
+    $binding['ConfigSha256'] = (Get-NXFileHash -LiteralPath $configPath -Algorithm SHA256).Hash
     $binding | ConvertTo-Json | Set-Content -LiteralPath $bindingPath -Encoding UTF8
 }
 Write-Host "[INFO] Server release: $releaseId"
