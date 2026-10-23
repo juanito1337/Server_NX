@@ -70,7 +70,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: core-${{ matrix.platform.os }}-py${{ matrix.platform.python }}-${{ matrix.shard }}
-          path: server/test-results/
+          path: |
+            server/test-results/
+            !server/test-results/**/powershell-module.cache*
           retention-days: 14
           if-no-files-found: warn
 
@@ -104,7 +106,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: browser-windows-${{ matrix.shard }}
-          path: server/test-results/
+          path: |
+            server/test-results/
+            !server/test-results/**/powershell-module.cache*
           retention-days: 14
           if-no-files-found: warn
 
@@ -130,7 +134,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: container-runtime
-          path: server/test-results/
+          path: |
+            server/test-results/
+            !server/test-results/**/powershell-module.cache*
           retention-days: 14
           if-no-files-found: warn
 

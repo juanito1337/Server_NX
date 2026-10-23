@@ -204,5 +204,5 @@ globalThis.NXSchemaImpact=(()=>{
   el('box').querySelector('summary').addEventListener('click',()=>{if(el('box').open)abandonOpen();});
   ['input','change'].forEach(event=>document.getElementById('editor-section').addEventListener(event,()=>{editorVersion++;}));
   el('read').onclick=()=>read();el('prev').onclick=()=>read(Math.max(0,data.offset-50),true);el('next').onclick=()=>read(data.offset+50,true);
-  return {configure,sync,clearConnection,workspaceChanged:abandonOpen};
+  return {configure,sync,clearConnection,workspaceChanged:abandonOpen,writeStarted:abandonOpen};
 })();

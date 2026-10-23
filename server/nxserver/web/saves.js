@@ -33,7 +33,7 @@ globalThis.NXSaves=(()=>{
     if(session!==connectionGeneration)return;
     message('Neue Stammdatenrevision gespeichert. Schreibbeleg bestätigt: '+result.id+' / Rev '+result.revision+'. '+(preserved?'Spätere Editoränderungen bleiben ungespeichert. ':'')+'NX-Dateien wurden nicht verändert.'+refreshError,Boolean(refreshError));
   }
-  async function run(operation){if(saveBusy)return;const owner={session:connectionGeneration};saveOwner=owner;saveBusy=true;render();message('Speicherversuch / Serverbeleg wird geprüft …');
+  async function run(operation){if(saveBusy)return;globalThis.NXSchemaImpact?.writeStarted?.();const owner={session:connectionGeneration};saveOwner=owner;saveBusy=true;render();message('Speicherversuch / Serverbeleg wird geprüft …');
     try{await operation(owner.session);}catch(error){if(owner.session===connectionGeneration&&!NXRequests.isStale(error)){render();message((pending?'Speicherung noch nicht bestätigt: ':'')+error.message,true);}}
     finally{if(saveOwner===owner){saveOwner=null;saveBusy=false;el('kind').disabled=Boolean(editing);render();}}}
   function save(){return run(async session=>{

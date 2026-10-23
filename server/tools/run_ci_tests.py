@@ -91,6 +91,70 @@ def id_hash(values):
     return hashlib.sha256('\n'.join(sorted(values)).encode('utf-8')).hexdigest()
 
 
+def powershell_settings(directory, environment):
+    """Own the module cache; never inspect a caller's cache or module paths.
+
+    Windows PowerShell constructs its default module path when PSModulePath is
+    absent. Its analysis cache can contain paths from the hosted image/user.
+    https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_environment_variables
+    """
+    root_text=environment.get('SYSTEMROOT') or environment.get('SystemRoot') or ''
+    if not root_text or not os.path.isabs(root_text):raise DomainError('An absolute local Windows system root is required.')
+    root=offline_path(root_text)
+    home=offline_path(root/'System32/WindowsPowerShell/v1.0')
+    executable=offline_path(home/'powershell.exe');modules=offline_path(home/'Modules')
+    if not executable.is_file() or not modules.is_dir():raise DomainError('Windows PowerShell 5.1 runtime is required.')
+    directory=offline_path(directory)
+    updates={'PSModulePath':str(modules),'PSModuleAnalysisCachePath':str(offline_path(directory/'powershell-module.cache')),
+             'PSDisableModuleAnalysisCacheCleanup':'1'}
+    # Temp/profile values are used by PowerShell and the C# compiler, so check
+    # these inputs before starting either process, including their drive type.
+    for key in ('TEMP','TMP','USERPROFILE','LOCALAPPDATA','APPDATA','ProgramFiles'):
+        value=environment.get(key) or environment.get(key.upper())
+        if value:offline_path(value)
+    return executable,updates
+
+
+def prepare_powershell(directory):
+    from tools.nxlab.processes import OwnedJob
+    executable,updates=powershell_settings(directory,os.environ)
+    environment={key:value for key,value in os.environ.items()
+        if not key.upper().startswith('PSMODULE') and key.upper()!='PSDISABLEMODULEANALYSISCACHECLEANUP'}
+    environment.update(updates)
+    script=offline_path(directory/'powershell-preflight.ps1')
+    script.write_text("""$ErrorActionPreference='Stop'
+[Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false)
+Add-Type -TypeDefinition 'public static class NXCICompilerProbe { public static int Result() { return 1; } }'
+$result=[pscustomobject]@{version=$PSVersionTable.PSVersion.ToString();compiler=([NXCICompilerProbe]::Result() -eq 1);module_paths=@($env:PSModulePath -split ';');module_cache=$env:PSModuleAnalysisCachePath}
+$result | ConvertTo-Json -Compress
+""",encoding='utf-8')
+    log=offline_path(directory/'powershell-preflight.log');started=time.monotonic()
+    try:
+        with log.open('xb') as stream, OwnedJob() as owned:
+            process=owned.start([str(executable),'-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',str(script)],
+                cwd=directory,env=environment,stdout=stream,stderr=subprocess.STDOUT)
+            try:code=process.wait(timeout=60)
+            except subprocess.TimeoutExpired as error:raise DomainError('Windows PowerShell/compiler preflight timed out; inspect its local log.') from error
+            if owned.active():raise DomainError('PowerShell preflight left an owned descendant running.')
+        if code:raise DomainError('Windows PowerShell/compiler preflight failed; inspect its local log.')
+        with log.open('rb') as stream:raw=stream.read(64*1024+1)
+        if len(raw)>64*1024:raise DomainError('PowerShell preflight output exceeds its bounded receipt.')
+        value=json.loads(raw.decode('utf-8-sig'))
+        if (not isinstance(value,dict) or not isinstance(value.get('version'),str) or
+            not value['version'].startswith('5.1.') or value.get('compiler') is not True or
+            not isinstance(value.get('module_paths'),list) or not value['module_paths']):
+            raise DomainError('Windows PowerShell 5.1/C# compiler receipt differs.')
+        if value['module_cache']!=updates['PSModuleAnalysisCachePath']:raise DomainError('PowerShell module cache is not owned by this run.')
+        paths=[str(offline_path(path)) for path in value['module_paths']]
+        return {'contract_version':1,'scope':'windows_ci_runtime_preflight','path':str(executable),
+                'version':value['version'],'module_paths':paths,'module_cache':value['module_cache'],
+                'compiler_verified':True,'seconds':round(time.monotonic()-started,3),
+                'script_sha256':hashlib.sha256(script.read_bytes()).hexdigest(),
+                'receipt_sha256':hashlib.sha256(raw).hexdigest()}
+    except (OSError,ValueError,KeyError,TypeError) as error:
+        raise DomainError('Windows PowerShell preflight receipt is missing or malformed; inspect its local log.') from error
+
+
 def required_runtime(name, requested=None):
     """Find only in the previously guarded PATH; never use the working directory."""
     candidates = [requested] if requested else [str(Path(folder) / (name + ('.exe' if os.name == 'nt' else '')))
@@ -259,9 +323,12 @@ def main(arguments=None, *, test_root=None):
     evidence = Evidence(directory, options.suite, options.shard_index, options.shard_count, source_manifest())
     try:
         if not options.collect_only:
+            if os.name=='nt' and test_root is None:
+                os.environ.update(powershell_settings(directory,os.environ)[1])
+                evidence.runtimes['powershell']=prepare_powershell(directory)
             if options.suite == 'core' and test_root is None:
-                evidence.runtimes = {name: required_runtime(name, getattr(options, name + '_executable'))
-                                     for name in ('node', 'git')}
+                evidence.runtimes.update({name: required_runtime(name, getattr(options, name + '_executable'))
+                                         for name in ('node', 'git')})
             if options.suite == 'browser':
                 # Missing Playwright/Edge is an infrastructure error, not hundreds of skips.
                 from playwright.sync_api import sync_playwright

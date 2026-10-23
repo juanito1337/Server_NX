@@ -136,3 +136,32 @@ def test_late_open_cannot_displace_a_real_pending_save(schema):
     page.evaluate('window.__releaseHeld()');page.wait_for_function('()=>window.__saveAttemptDone')
     expect(page.locator('#message')).to_contain_text('Neue Stammdatenrevision gespeichert')
     assert len(store.history(resource['id']))==2 and store.active()['release_id'] is None
+    assert next(value for value in store.resources() if value['id']==resource['id'])['name']=='Actually submitted newer schema draft'
+
+
+@pytest.mark.parametrize('schema',[{'count':1}],indirect=True)
+@pytest.mark.parametrize('status',[400,422])
+def test_rejected_save_still_abandons_an_older_worklist_open(schema,status):
+    from playwright.sync_api import expect
+    page,store,target,resource,*_=schema
+    name='Preserve draft after rejected save';page.locator('#name').fill(name)
+    show(page,target);read(page);page.on('dialog',lambda dialog:dialog.accept())
+    button=page.locator('#schema-impact-items tr').filter(has_text=resource['name']).get_by_role('button',name='Im Schemaeditor prüfen')
+    button.evaluate('(node)=>node.id="schema-row-test-open"');track(page,'schema-row-test-open')
+    hold(page,'/api/v1/resources/'+resource['id']);button.click();page.wait_for_function('()=>window.__held')
+    def reject_write(route):
+        if route.request.method=='PUT':route.fulfill(status=status,json={'detail':'Synthetic validation rejection'})
+        else:route.continue_()
+    page.route('**/api/v1/resources/'+resource['id'],reject_write)
+    # The real cancellation endpoint fences the rejected request key. A brief
+    # saveBusy interval is over, but the newer write intent must remain final.
+    page.evaluate('async()=>{await NXSaves.save();}')
+    assert not page.evaluate('saveBusy||NXSaves.blocksSave()')
+    expect(page.locator('#message')).to_contain_text('Synthetic validation rejection')
+    before=snapshot(store)['sha256'];draft=page.locator('#cam').input_value();calls=[]
+    page.on('request',lambda request:calls.append(request.method) if '/api/v1/' in request.url else None)
+    page.evaluate('window.__releaseHeld()');page.wait_for_function('()=>window.__oldActionFinished')
+    expect(page.locator('#name')).to_have_value(name)
+    expect(page.locator('#cam')).to_have_value(draft);expect(page.locator('#panel-manage')).to_be_visible()
+    expect(page.locator('#message')).to_contain_text('Synthetic validation rejection')
+    assert not calls and snapshot(store)['sha256']==before and len(store.history(resource['id']))==1

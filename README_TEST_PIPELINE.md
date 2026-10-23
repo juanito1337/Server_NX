@@ -25,6 +25,15 @@ prüft beide Versionen, protokolliert sie und ergänzt nur seinen eigenen Prozes
 Eine fehlende oder unpassende Laufzeit erzeugt einen Infrastrukturfehler mit
 JUnit-/JSON-Bericht, statt JavaScript- oder Repositorytests grün zu überspringen.
 
+Unter Windows prüft der Starter vor Core- und Browserläufen zusätzlich Windows
+PowerShell 5.1 und eine kleine C#-Kompilierung. Ein eigener Modulcache gehört zum
+jeweiligen Lauf; fremde Modulpfade und geerbte Cache-Dateien werden nicht übernommen.
+Version, Startdauer und gehashter Prüfbeleg stehen im Laufzeitnachweis. Auch dieser
+Prozess und seine Kinder gehören zu einem eigenen Windows Job Object. Fehlender
+Compiler, Zeitüberschreitung oder ein verbliebener Kindprozess sind Infrastrukturfehler.
+Die Cache-Datei wird nicht als GitHub-Artefakt hochgeladen; Skript und Prüfprotokoll
+bleiben als gebundene Nachweise erhalten. Dieser Vorlauf startet NX nicht.
+
 `server` startet eigene HTTP-Server auf localhost, prüft Entwurf/Anhang/NX2406-Paket,
 Ergebnis-ZIP, Übernahme als zwei verbundene Entwürfe, Ausschluss dieser Entwürfe
 beim Export, Neustart und Backup/Wiederherstellung in eine zweite Instanz.

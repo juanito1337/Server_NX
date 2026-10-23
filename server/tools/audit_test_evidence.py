@@ -67,6 +67,23 @@ def audit(directories,expected=None):
         require(files and source_info['sha256']==digest and summary['source_sha256']==digest,'Source manifest binding differs.')
         if source is None:source=digest;source_commit=source_info.get('commit')
         require(source==digest and source_commit==source_info.get('commit'),'Evidence mixes different source states.')
+        require(plan.get('runtimes',{})==summary.get('runtimes',{}),'Runtime preflight metadata differs.')
+        powershell=plan.get('runtimes',{}).get('powershell')
+        if powershell is not None:
+            require(isinstance(powershell,dict) and powershell.get('contract_version')==1 and
+                powershell.get('scope')=='windows_ci_runtime_preflight' and powershell.get('compiler_verified') is True and
+                re.fullmatch(r'5\.1\.[0-9]+(?:\.[0-9]+)?',powershell.get('version','')),
+                'Windows PowerShell/compiler preflight is not supported.')
+            for name,field in [('powershell-preflight.ps1','script_sha256'),('powershell-preflight.log','receipt_sha256')]:
+                documents[name],hashes[name]=read(directory,name,64*1024)
+                require(hashes[name]==powershell.get(field),'PowerShell preflight bytes differ from their binding.')
+            receipt=json.loads(documents['powershell-preflight.log'].decode('utf-8-sig'))
+            canonical=lambda value:str(value).replace('\\','/').rstrip('/').casefold()
+            require(isinstance(receipt,dict) and receipt.get('compiler') is True and receipt.get('version')==powershell['version'] and
+                receipt.get('module_cache')==powershell.get('module_cache') and
+                isinstance(receipt.get('module_paths'),list) and receipt['module_paths'] and
+                list(map(canonical,receipt['module_paths']))==list(map(canonical,powershell.get('module_paths',[]))),
+                'PowerShell receipt and runtime metadata disagree.')
         if suite=='core':
             runtimes=plan.get('runtimes',{})
             require(runtimes==summary.get('runtimes') and

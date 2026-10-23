@@ -90,3 +90,30 @@ def test_default_acceptance_requires_two_core_and_four_browser_groups(cohort,tmp
 def test_audit_rejects_protected_inputs_before_first_lookup(monkeypatch):
     monkeypatch.setattr(Path,'lstat',lambda *a,**k:pytest.fail('Protected input cannot be looked up.'))
     with pytest.raises(DomainError):audit([r'W:\never-accessed'])
+
+
+@pytest.mark.parametrize('defect',[None,'missing_log','changed_log','changed_script','compiler','version','cache','summary'])
+def test_versioned_windows_preflight_is_bound_and_old_reports_remain_readable(cohort,defect):
+    first=cohort[0];script=b'Inert compiler preflight fixture'
+    receipt={'version':'5.1.123.4','compiler':True,'module_paths':['C:/Windows/Modules'],'module_cache':'C:/Test/owned.cache'}
+    raw=json.dumps(receipt).encode()
+    (first/'powershell-preflight.ps1').write_bytes(script);(first/'powershell-preflight.log').write_bytes(raw)
+    value={'contract_version':1,'scope':'windows_ci_runtime_preflight','compiler_verified':True,
+           'version':receipt['version'],'module_paths':receipt['module_paths'],'module_cache':receipt['module_cache'],
+           'script_sha256':hashlib.sha256(script).hexdigest(),'receipt_sha256':hashlib.sha256(raw).hexdigest()}
+    if defect=='compiler':value['compiler_verified']=False
+    if defect=='version':value['version']='7.5.0'
+    if defect=='cache':value['module_cache']='different.cache'
+    for name in ('plan','summary'):
+        document=json.loads((first/(name+'.json')).read_text());document['runtimes']['powershell']=value
+        change(first,name,runtimes=document['runtimes'])
+    if defect=='summary':
+        document=json.loads((first/'summary.json').read_text());document['runtimes'].pop('powershell');change(first,'summary',runtimes=document['runtimes'])
+    if defect=='missing_log':(first/'powershell-preflight.log').unlink()
+    if defect=='changed_log':(first/'powershell-preflight.log').write_bytes(b'{}')
+    if defect=='changed_script':(first/'powershell-preflight.ps1').write_bytes(b'Changed')
+    if defect:
+        with pytest.raises((DomainError,OSError)):audit(cohort,{'core':2,'browser':2})
+    else:
+        result=audit(cohort,{'core':2,'browser':2});assert result['status']=='passed'
+        assert len(result['evidence'][0]['files'])==6 and len(result['evidence'][1]['files'])==4
