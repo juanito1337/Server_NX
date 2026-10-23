@@ -141,6 +141,16 @@ Jeder NX-Start verwendet außerdem ein eigenes Windows Job Object: vor Ausführu
 Kindprozesse eingeschlossen, keine Prozessnamensuche. Bei Timeout wird nur dieser
 Job beendet und dessen Ende geprüft. Die Benutzer-NX-Sitzung wird nicht beendet.
 
+Vor einem erzwungenen Ende werden die Mitglieder ausschließlich aus dem eigenen Job
+ermittelt und ihre Handles durch `IsProcessInJob` geprüft. Nach dem Beenden wartet der
+Starter auf diese konkreten Prozesshandles. Eine leere Job-Zählung allein bestätigt
+keine abgeschlossene Freigabe von Dateihandles. Ändert sich die Mitgliedschaft während
+dieser Prüfung, bleibt der Abschluss ungeklärt und der Lauf schlägt fehl. Es werden
+keine systemweiten Prozesslisten oder fremden NX-Sitzungen verwaltet.
+Die Wartebedingung folgt den dokumentierten Verträgen von
+[TerminateProcess](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess)
+und [IsProcessInJob](https://learn.microsoft.com/en-us/windows/win32/api/jobapi/nf-jobapi-isprocessinjob).
+
 Die NX-Stufe erzeugt außerdem einen lokalen Server-Zielstand mit den 14
 installierten Werkzeug-/Halter-/Schaft-/Baugruppen-/Bezugspunktbibliotheken.
 Der vorhandene native Schreiber entfernt ausschließlich DATA-Datensätze;

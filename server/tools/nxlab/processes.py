@@ -1,7 +1,8 @@
 """Windows Job Object confines every descendant to the explicitly owned launch.
 
 Create suspended, assign to job, then resume: there is no child-escape window.
-No process enumeration or user-session process termination is used.
+Only this job's member list is inspected; every opened handle is checked for
+membership before use. No system process list or user session is managed.
 """
 import ctypes as c
 from ctypes import wintypes as w
@@ -39,7 +40,11 @@ class OwnedJob:
         self.api.AssignProcessToJobObject.argtypes=[w.HANDLE,w.HANDLE]
         self.api.QueryInformationJobObject.argtypes=[w.HANDLE,c.c_int,c.c_void_p,w.DWORD,c.c_void_p]
         self.api.TerminateJobObject.argtypes=[w.HANDLE,w.UINT]
+        self.api.OpenProcess.argtypes=[w.DWORD,w.BOOL,w.DWORD];self.api.OpenProcess.restype=w.HANDLE
+        self.api.IsProcessInJob.argtypes=[w.HANDLE,w.HANDLE,c.POINTER(w.BOOL)]
+        self.api.WaitForSingleObject.argtypes=[w.HANDLE,w.DWORD];self.api.WaitForSingleObject.restype=w.DWORD
         self.api.CloseHandle.argtypes=[w.HANDLE]
+        self.started=[]
         self.handle=self.api.CreateJobObjectW(None,None)
         if not self.handle:raise c.WinError(c.get_last_error())
         info=Extended();info.basic.flags=0x2000 # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
@@ -52,6 +57,7 @@ class OwnedJob:
         try:
             if not self.api.AssignProcessToJobObject(self.handle,int(process._handle)):
                 raise c.WinError(c.get_last_error())
+            self.started.append(process)
             resume=c.WinDLL('ntdll').NtResumeProcess;resume.argtypes=[w.HANDLE];resume.restype=c.c_long
             if resume(int(process._handle))!=0:raise RuntimeError('Cannot resume owned NX launcher.')
             return process
@@ -59,16 +65,67 @@ class OwnedJob:
             process.kill();process.wait(timeout=15);raise
 
     def active(self):
+        return self.accounting().active
+
+    def accounting(self):
         value=Accounting()
         if not self.api.QueryInformationJobObject(self.handle,1,c.byref(value),c.sizeof(value),None):
             raise c.WinError(c.get_last_error())
-        return value.active
+        return value
+
+    def members(self):
+        # JobObjectBasicProcessIdList includes nested jobs. The buffer can grow
+        # while children start; bounded retries never enumerate unrelated PIDs.
+        for count in (32,128,512,2048,4096):
+            class Members(c.Structure):
+                _fields_=[('assigned',w.DWORD),('listed',w.DWORD),('ids',c.c_size_t*count)]
+            value=Members()
+            if self.api.QueryInformationJobObject(self.handle,3,c.byref(value),c.sizeof(value),None):
+                if value.assigned<=count and value.listed==value.assigned:
+                    return list(value.ids[:value.listed])
+            elif c.get_last_error()!=234:raise c.WinError(c.get_last_error()) # ERROR_MORE_DATA
+        raise RuntimeError('Owned job membership exceeds the bounded shutdown snapshot.')
+
+    def member_handles(self):
+        handles=[]
+        try:
+            for pid in self.members():
+                handle=self.api.OpenProcess(0x00100000|0x1000,False,pid) # SYNCHRONIZE | QUERY_LIMITED_INFORMATION
+                if not handle:raise c.WinError(c.get_last_error())
+                handles.append(handle)
+                belongs=w.BOOL()
+                if not self.api.IsProcessInJob(handle,self.handle,c.byref(belongs)):
+                    raise c.WinError(c.get_last_error())
+                if not belongs.value:raise RuntimeError('Job member identity changed; shutdown cannot be certified.')
+            return handles
+        except BaseException:
+            for handle in handles:self.api.CloseHandle(handle)
+            raise
 
     def __exit__(self,*args):
+        handles=[]
         try:
-            if self.active():
+            before=self.accounting()
+            if before.active:
+                # TerminateJobObject can remove a member from accounting before
+                # that process releases handles. Pin exact member generations
+                # BEFORE termination, then wait on those process handles.
+                handles=self.member_handles()
+                pinned=self.accounting()
+                if pinned.total!=before.total or pinned.active>len(handles):
+                    raise RuntimeError('Owned job membership changed during shutdown; cannot certify closure.')
                 if not self.api.TerminateJobObject(self.handle,1):raise c.WinError(c.get_last_error())
-                deadline=time.monotonic()+15
+            deadline=time.monotonic()+15
+            for handle in handles+[int(process._handle) for process in self.started]:
+                milliseconds=max(0,int((deadline-time.monotonic())*1000))
+                outcome=self.api.WaitForSingleObject(handle,milliseconds)
+                if outcome==0xffffffff:raise c.WinError(c.get_last_error())
+                if outcome!=0:raise RuntimeError('Owned process has not terminated; do not start another run.')
+            if before.active:
                 while self.active() and time.monotonic()<deadline:time.sleep(0.05)
-                if self.active():raise RuntimeError('Owned NX job has not terminated; do not start another run.')
-        finally:self.api.CloseHandle(self.handle)
+                after=self.accounting()
+                if after.active or after.total!=pinned.total:
+                    raise RuntimeError('Owned job shutdown membership is uncertain; do not start another run.')
+        finally:
+            for handle in handles:self.api.CloseHandle(handle)
+            self.api.CloseHandle(self.handle)
