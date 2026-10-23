@@ -43,7 +43,7 @@ def pure_input_check(tmp_path, value):
     try {{$result=Get-NXWindowsUpgradeInputs -Configuration $configuration;Write-Output 'INPUT_OK'}}
     catch {{Write-Output ('INPUT_ERROR:'+ $_.Exception.Message);exit 9}}
     """
-    return subprocess.run([POWERSHELL,'-NoProfile','-Command',command],capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=20)
+    return subprocess.run([POWERSHELL,'-NoProfile','-ExecutionPolicy','Bypass','-Command',command],capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=20)
 
 
 def test_explicit_version_and_three_separate_local_inputs_are_accepted_without_io(tmp_path):

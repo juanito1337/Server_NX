@@ -119,7 +119,7 @@ except ImportError:
     PROTOCOLS,TOOL_TYPES,preflight=_step.PROTOCOLS,_step.TOOL_TYPES,_step.preflight
 
 
-def check_environment(session):
+def check_environment(session, nx_version='2512'):
     # Inspect path-valued NX variables as text BEFORE any filesystem lookup.
     values = dict(os.environ)
     for key in ('UGII_BASE_DIR', 'UGII_CUSTOM_DIRECTORY_FILE', 'UGII_CAM_RESOURCE_DIR',
@@ -131,8 +131,8 @@ def check_environment(session):
         if re.search(r'(?i)(?:^|[;=\s"\'])w:|\\\\|//|/mnt/w(?:/|$)|siemensshare', value):
             raise DomainError('NX has a network/production environment setting: ' + key + '. Use an isolated local NX session.')
     base = values.get('UGII_BASE_DIR', '')
-    if base.replace('\\', '/').rstrip('/').casefold() != 'c:/siemens/nx2512':
-        raise DomainError('This pilot requires the local C:\\Siemens\\NX2512 installation.')
+    if nx_version not in ('2406', '2512') or base.replace('\\', '/').rstrip('/').casefold() != 'c:/siemens/nx'+nx_version:
+        raise DomainError('This pilot requires the pinned local C:/Siemens/NX installation for '+nx_version+'.')
     return offline_path(base)
 
 
@@ -217,7 +217,7 @@ def local_settings(settings, output):
 def run_job(directory, session, nx):
     directory = job_directory(directory)
     job = json.loads(read_bounded_file(directory/'job.json',max_bytes=MAX_JOB_BYTES).decode('utf-8-sig'))
-    if job.get('contract_version') != 1 or job.get('nx_version') != '2512' or job.get('tool_type') not in TOOL_TYPES:
+    if job.get('contract_version') != 1 or job.get('nx_version') not in ('2406','2512') or job.get('tool_type') not in TOOL_TYPES:
         raise DomainError('Unsupported NX job contract.')
     # The package is pinned to these exact helper sources, not current server code.
     if set(job.get('worker_hashes', {})) != {'nx_step_import.py', 'nx_safety.py', 'stepfiles.py'}:
@@ -232,7 +232,7 @@ def run_job(directory, session, nx):
         expected_sha256=job['input']['sha256'],changed_message='STEP differs from the pinned job input.'))
     if check['sha256'] != job['input']['sha256'] or check['protocol'] != job['input']['protocol']:
         raise DomainError('STEP differs from the pinned job input.')
-    base = check_environment(session)
+    base = check_environment(session) if job['nx_version']=='2512' else check_environment(session, job['nx_version'])
     # Never modify an existing part or CAM session, including background parts.
     if session.Parts.Work is not None or session.Parts.Display is not None or any(True for _ in session.Parts):
         raise DomainError('Close all parts first. This import requires a fresh, empty NX session.')
@@ -243,7 +243,7 @@ def run_job(directory, session, nx):
     report = {'contract_version': 1, 'job_id': job['id'], 'resource_id': job['resource_id'],
               'resource_revision': job['resource_revision'], 'input_sha256': check['sha256'],
               'resource_hash': job['resource_hash'], 'worker_hashes': job['worker_hashes'],
-              'nx_version': '2512', 'installation': str(base), 'tool_type': job['tool_type'],
+              'nx_version': job['nx_version'], 'installation': str(base), 'tool_type': job['tool_type'],
               'status': 'failed', 'parts': [], 'components': [], 'files': [],
               'errors': [], 'warnings': [], 'automatic_cam_approval': False}
     previous = Path.cwd()

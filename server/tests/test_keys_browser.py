@@ -46,6 +46,9 @@ def test_conflict_identifier_and_nested_constructor_are_plain_json_and_bad_branc
     from playwright.sync_api import expect
     page,store,release,resource=ui
     page.on('dialog',lambda dialog:dialog.accept());page.locator('#tab-update').click()
+    # Prepared-folder conflict controls are intentionally inert in full-upgrade
+    # mode. Select their real workflow before checking literal JSON key handling.
+    page.locator('#upgrade-mode').select_option('prepared')
     # Contract supplied by a synthetic planner, no real source/target data writes.
     page.evaluate("""()=>NXNative.renderConflicts({references:{errors:[]},conflicts:[{
         library:'tool-metric',source:'fixture.dat',key:'__proto__',type:'data',reason:'Synthetic conflict'}]})""")

@@ -10,6 +10,16 @@ from nxserver.safety import DomainError
 from test_reader_limits import observe
 
 
+def test_windows_creation_time_is_consistent_across_path_and_handle(tmp_path):
+    if os.name!='nt':pytest.skip('Windows stat/fstat semantics.')
+    from nxserver.safety import file_stamp
+    import time
+    path=tmp_path/'created.bin';path.touch();time.sleep(0.02);path.write_bytes(b'updated')
+    with path.open('rb') as stream:
+        assert file_stamp(path.stat())==file_stamp(os.fstat(stream.fileno()))
+    assert bounded_file.read(path,max_bytes=100)==b'updated'
+
+
 @pytest.mark.parametrize('raw',[b'x',b'\x00\xffbinary',b'1234567890123456'])
 def test_exact_bytes_and_hash_are_preserved_with_one_bounded_read(tmp_path,monkeypatch,raw):
     path=tmp_path/'synthetic.bin';path.write_bytes(raw);reads=observe(monkeypatch,path)

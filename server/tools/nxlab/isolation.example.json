@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "developer_sid": "REPLACE_WITH_PREPARED_PROFILE_SID",
+  "test_account_sid": "REPLACE_WITH_DIFFERENT_DEDICATED_ACCOUNT_SID",
+  "dedicated_account": false,
+  "production_file_access_denied": false,
+  "reviewed_by": "",
+  "isolation_evidence": "Replace with an administrator-reviewed description of share/NTFS or network isolation. An unmapped drive is insufficient. Never test by accessing W:."
+}

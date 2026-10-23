@@ -672,6 +672,8 @@ class Store:
                     if export_plan:
                         from .template_refs import verify as verify_template_dependencies
                         verify_template_dependencies(self,folder,export_plan['template_references'])
+                        from .fixture_refs import verify as verify_fixture_dependencies
+                        verify_fixture_dependencies(folder,export_plan['fixture_references'])
                     db.execute('UPDATE releases SET status=?,manifest=?,catalog=? WHERE id=?',
                                ('draft', canonical(manifest), canonical({'resources': catalog, 'exported_tools': exports,
                                    'exported_native': native_exports, 'export_actions': actions,
@@ -1024,9 +1026,12 @@ class Store:
         from .template_refs import planned as template_dependencies
         template_report=template_dependencies(self,release,plan)
         conflicts.extend({**item,'status':409} for item in template_report['errors'] if not item.get('upstream_conflict'))
+        from .fixture_refs import planned as fixture_dependencies
+        fixture_report=fixture_dependencies(self,release,plan)
+        conflicts.extend({**item,'status':409} for item in fixture_report['errors'])
         assets = [{key:value for key,value in item.items() if key!='source'} for item in plan['assets'].values()]
         report = {'release_id': release_id, 'nx_version': release['nx_version'],'file_packages':file_actions,'native_preview_contract':1,
-                  'reference_reviews': previous.get('reference_reviews',{}),'template_references':template_report,
+                  'reference_reviews': previous.get('reference_reviews',{}),'template_references':template_report,'fixture_references':fixture_report,
                   'parent_folder': str(folder), 'defaults': defaults,
                   'actions': plan['actions'], 'file_deletions':plan.get('file_deletions',[]), 'new_columns': list(columns.values()),
                   'conflicts': conflicts, 'references': references, 'assets': assets,
@@ -1378,6 +1383,10 @@ class Store:
             validation['libraries'] = inventory(folder)
             validation['references'] = references
             errors.extend(canonical(e) for e in references['errors'])
+            from .fixture_refs import planned as fixture_dependencies
+            fixture_report=fixture_dependencies(self,release,{'assets':{}})
+            validation['fixture_references']=fixture_report
+            errors.extend('KRX fixture reference: '+canonical(item) for item in fixture_report['errors'])
             validation['integrity_passed'] = not errors
             retained = release['status'] == 'approved' and self.review_current(release)
             reasons = []

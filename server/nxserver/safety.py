@@ -17,7 +17,11 @@ def file_stamp(value):
     # not fstat(). They are not ACL rights. Preserve real mode checks on POSIX
     # and all remaining identity/size/timestamp fields on both platforms.
     mode=value.st_mode&~0o111 if os.name=='nt' else value.st_mode
-    return (mode,value.st_dev,value.st_ino,value.st_size,value.st_mtime_ns,value.st_ctime_ns)
+    # Python 3.12+ exposes creation time explicitly on Windows. stat(path) and
+    # fstat(handle) can disagree on deprecated ctime even for unchanged files.
+    # Retain identity, size and mtime; use birth time consistently on Windows.
+    identity_time=getattr(value,'st_birthtime_ns',value.st_ctime_ns) if os.name=='nt' else value.st_ctime_ns
+    return (mode,value.st_dev,value.st_ino,value.st_size,value.st_mtime_ns,identity_time)
 
 
 def read_bounded_file(path,*,max_bytes,expected_size=None,expected_sha256=None,path_guard=None,
@@ -90,6 +94,9 @@ def asset_filename(value):
 def offline_path(value):
     """Reject network/protected paths before even performing filesystem lookups."""
     text = str(value).replace('\\', '/')
+    if (text != text.strip() or '\x00' in text or re.match(r'(?i)^(?:file:|/\?\?/)',text)
+            or re.search(r'(?i)(?:^|/)w:',text)):
+        raise DomainError('Protected/network paths are not allowed.')
     if re.match(r'(?i)^w:', text) or text.startswith('//') or re.search(
         r'(?i)(^|/)siemensshare/nx2406($|/)', text
     ):

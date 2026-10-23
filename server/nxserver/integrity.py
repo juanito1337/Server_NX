@@ -184,11 +184,11 @@ def metadata(state,issues,anchor,store=None):
         except (DomainError,TypeError,KeyError,ValueError):issues.add('invalid_resource',identifier,'Resource CAM/ERP identity is invalid.')
         if payload.get('file_package') is not None:
             # Snapshot metadata only: do not perform live Store/FS reads here.
-            from .filepackages import Package,CHECKS,path_for
+            from .filepackages import Package,CHECKS,version_path
             try:
                 package=Package.model_validate(payload['file_package']).model_dump();paths=set();assigned=set()
                 for entry in package['entries']:
-                    path_for(payload['kind'],entry['path']);key=entry['path'].casefold();asset=entry['asset_id']
+                    version_path(payload['kind'],entry['path'],package['nx_version']);key=entry['path'].casefold();asset=entry['asset_id']
                     if key in paths or asset in assigned or asset not in payload['asset_ids'] or asset not in assets:raise ValueError('Invalid binding')
                     paths.add(key);assigned.add(asset)
                     if entry['path'].split('/')[-1]!=assets[asset]['filename']:raise ValueError('Renamed file')

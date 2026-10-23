@@ -31,6 +31,18 @@ MAX_PATH_CHARS=240
 # 20 MiB attachment limit on legitimate larger Siemens stock files.
 MAX_BASELINE_BYTES=1<<40
 XML_SUFFIXES={'.pax','.xml','.mtx','.dpv'}
+LEGACY_FIXTURE_ROOT='MACH/resource/library/fixture/'
+
+
+def legacy_fixture(kind,version):return kind=='fixture' and version=='2406'
+
+
+def roots_for(kind,nx_version=None):
+    return (*ROOTS[kind],LEGACY_FIXTURE_ROOT) if legacy_fixture(kind,nx_version) else ROOTS[kind]
+
+
+def version_path(kind,path,nx_version):
+    return path_for(kind,path,nx_version) if legacy_fixture(kind,nx_version) else path_for(kind,path)
 
 
 def file_content(path,metadata):
@@ -59,19 +71,21 @@ class Package(BaseModel):
     provenance:dict|None=None
 
 
-def supported_file(kind,path):
+def supported_file(kind,path,nx_version=None):
     """Profile definitions belong only to the designated UI profile tree."""
     suffix=PurePosixPath(path).suffix.lower()
-    return (any(path.startswith(root) for root in ROOTS[kind]) and
-            (suffix in SUFFIXES or kind=='ui_standard' and path.startswith(UI_PROFILE_ROOT) and suffix in UI_PROFILE_SUFFIXES))
+    legacy=legacy_fixture(kind,nx_version) and path.startswith(LEGACY_FIXTURE_ROOT)
+    if legacy:return suffix in {'.krx','.prt','.bmp','.png','.jpg','.jpeg'}
+    return (any(path.startswith(root) for root in roots_for(kind,nx_version)) and
+            (suffix in SUFFIXES or legacy and suffix in ('.krx','.bmp') or kind=='ui_standard' and path.startswith(UI_PROFILE_ROOT) and suffix in UI_PROFILE_SUFFIXES))
 
 
-def path_for(kind,path):
+def path_for(kind,path,nx_version=None):
     if kind not in ROOTS:raise DomainError('This kind has no supported NX file-package layout.')
     if not isinstance(path,str) or not 1<=len(path)<=MAX_PATH_CHARS:
         raise DomainError(f'Package path must contain 1-{MAX_PATH_CHARS} characters.')
     portable(path)
-    if not supported_file(kind,path):
+    if not supported_file(kind,path,nx_version):
         raise DomainError('Choose an approved standard NX directory and non-executable file extension.')
     for part in path.split('/'):asset_filename(part)
     return path
@@ -98,10 +112,10 @@ def validate(store,resource,old=None,trusted=False):
         raise DomainError('Templates/UI standards use file packages, not guessed native DAT records.')
     if resource.get('file_bindings') or resource.get('model_package'):
         raise DomainError('Use one explicit file-binding mechanism; clear old graphic/model bindings before adopting a file package.')
-    names=set();assets=set()
-    export_path_casing(path_for(resource['kind'],entry['path']) for entry in package['entries'])
+    names=set();assets=set();krx={}
+    export_path_casing(version_path(resource['kind'],entry['path'],package['nx_version']) for entry in package['entries'])
     for entry in package['entries']:
-        path_for(resource['kind'],entry['path']);key=entry['path'].casefold()
+        version_path(resource['kind'],entry['path'],package['nx_version']);key=entry['path'].casefold()
         if key in names or entry['asset_id'] in assets:raise DomainError('Repeated package path/asset assignment.')
         names.add(key);assets.add(entry['asset_id'])
         if entry['asset_id'] not in resource['asset_ids']:raise DomainError('Package files must be attached to this resource.')
@@ -109,6 +123,12 @@ def validate(store,resource,old=None,trusted=False):
         if PurePosixPath(entry['path']).name!=metadata['filename']:raise DomainError('Keep the original basename; binary references are never renamed.')
         content=file_content(file,metadata)
         if file.suffix.lower() in XML_SUFFIXES:checked_xml(content,metadata['filename'])
+        if legacy_fixture(resource['kind'],package['nx_version']) and file.suffix.lower()=='.krx':
+            from .fixture_refs import bounded_descriptor
+            krx[entry['path']]=bounded_descriptor(content)
+    if legacy_fixture(resource['kind'],package['nx_version']) and any(entry['path'].startswith(LEGACY_FIXTURE_ROOT) for entry in package['entries']):
+        from .fixture_refs import validate_package
+        validate_package(package['entries'],krx)
     if resource['cam_status']=='approved':
         if set(package['checks'])!=CHECKS or not all(value is True for value in package['checks'].values()) or len(package['evidence'].strip())<20:
             raise DomainError('Confirm all four package checks and provide a meaningful NX test statement.')
@@ -125,7 +145,7 @@ def preflight(store,request):
     try:
         if any(str(uuid.UUID(identifier))!=identifier for identifier in attached):raise ValueError()
     except (ValueError,TypeError,AttributeError) as failure:raise DomainError('Invalid attached file identifier.') from failure
-    errors=[];files=[];metadata={};total=0;paths=set();asset_ids=set();portable_paths=[]
+    errors=[];files=[];metadata={};total=0;paths=set();asset_ids=set();portable_paths=[];krx={}
     def error(index,path,code,reason):errors.append({'index':index,'path':path,'code':code,'reason':reason})
     def read_metadata(identifier):
         # Do not use store.asset here: its legacy verifier hashes the full file
@@ -142,7 +162,7 @@ def preflight(store,request):
             identifier,path=entry['asset_id'],entry['path']
             item={'index':index,'asset_id':identifier,'path':path,'filename':None,'size':None,'sha256':None,'bytes_verified':False,'xml_checked':None}
             files.append(item)
-            try:path_for(kind,path);portable_paths.append(path)
+            try:version_path(kind,path,request['nx_version']);portable_paths.append(path)
             except DomainError as failure:error(index,path,'path',str(failure))
             if path.casefold() in paths:error(index,path,'duplicate_path','Repeated case-insensitive package path.')
             paths.add(path.casefold())
@@ -169,13 +189,21 @@ def preflight(store,request):
                     if identifier not in checked:
                         try:
                             value,path=metadata[identifier];raw=file_content(path,value)
-                            xml=PurePosixPath(value['filename']).suffix.lower() in XML_SUFFIXES
+                            xml=PurePosixPath(value['filename']).suffix.lower() in XML_SUFFIXES or legacy_fixture(kind,request['nx_version']) and value['filename'].lower().endswith('.krx')
                             if xml:checked_xml(raw,value['filename'])
+                            if legacy_fixture(kind,request['nx_version']) and value['filename'].lower().endswith('.krx'):
+                                from .fixture_refs import bounded_descriptor
+                                krx[item['path']]=bounded_descriptor(raw)
                             checked[identifier]=xml
                         except DomainError as failure:checked[identifier]=failure
                     if isinstance(checked[identifier],DomainError):raise checked[identifier]
                     item.update(bytes_verified=True,xml_checked=checked[identifier])
                 except DomainError as failure:error(item['index'],item['path'],'content',str(failure))
+        fixture_report=None
+        if legacy_fixture(kind,request['nx_version']) and any(entry['path'].startswith(LEGACY_FIXTURE_ROOT) for entry in entries):
+            from .fixture_refs import validate_package
+            try:fixture_report=validate_package(entries,krx)
+            except DomainError as failure:error(None,None,'fixture_reference',str(failure))
         # Re-read selected metadata after the last byte check, never private docs.
         for identifier,(expected,path) in metadata.items():
             current,current_path=read_metadata(identifier)
@@ -186,6 +214,7 @@ def preflight(store,request):
             'read_only':True,'nx_files_written':False,'automatic_approval':False,'automatic_save':False,
             'ownership_validation':False,'dependency_validation':False,'nx_validation':False,
             'max_file_bytes':MAX_BYTES,'max_total_bytes':MAX_PREFLIGHT_BYTES}
+        if fixture_report is not None:report['fixture_references']=fixture_report
         report['preview_hash']=digest(report)
         return report
 
@@ -228,8 +257,8 @@ def _baseline_sha256(path):
     return file_fingerprint(path,max_bytes=MAX_BASELINE_BYTES)['sha256']
 
 
-def _baseline_file(root,sidt,kind,relative):
-    prefix=next(prefix for prefix in ROOTS[kind] if relative.startswith(prefix))
+def _baseline_file(root,sidt,kind,relative,nx_version=None):
+    prefix=next(prefix for prefix in roots_for(kind,nx_version) if relative.startswith(prefix))
     if not _baseline_candidate(root,prefix.rstrip('/'),directory=True).is_dir():raise DomainError('Siemens baseline directory is missing; customer ownership cannot be guessed.',409)
     candidate=_baseline_candidate(root,relative)
     for origin,target in OVERLAYS:
@@ -267,7 +296,7 @@ def verify_adoption_commit(store,db,report,payload,resource_id):
         try:file_content(path,item)
         except DomainError as error:raise DomainError('File adoption source bytes changed before ownership commit: '+str(error),409) from error
         try:
-            baseline=_baseline_file(root,sidt,report['kind'],item['path']);expected=report['baseline_inputs'][item['path']]
+            baseline=_baseline_file(root,sidt,report['kind'],item['path'],release['nx_version']);expected=report['baseline_inputs'][item['path']]
             if str(baseline)!=expected['baseline_path'] or _baseline_sha256(baseline)!=expected['sha256']:
                 raise DomainError('Baseline differs from its reviewed binding.',409)
         except DomainError as error:raise DomainError('File adoption baseline bytes changed before ownership commit: '+str(error),409) from error
@@ -288,14 +317,15 @@ class FilePackages:
             raise DomainError('A Siemens standard object cannot own customer files.')
         if parent and (parent.get('file_bindings') or parent.get('model_package')):
             raise DomainError('Existing explicit graphic/model bindings must be reviewed and cleared before file-package adoption.')
-        if kind in ('machine','fixture') and not parent:raise DomainError('Choose the saved machine/fixture DAT draft; no native object is invented.')
+        standalone_krx=legacy_fixture(kind,release['nx_version']) and any(path.lower().endswith('.krx') for path in paths)
+        if kind in ('machine','fixture') and not parent and not standalone_krx:raise DomainError('Choose the saved machine/fixture DAT draft; no native object is invented.')
         root=self.store.standards.get(release['nx_version'])
         if root is None:raise DomainError('A matching Siemens installation baseline is required for existing-file ownership.')
         sidt=self.store.sidt_root(release['nx_version'])
-        inputs={};entries=[];conflicts=[];known={item['path'].casefold():item for item in release['manifest']}
+        inputs={};entries=[];conflicts=[];krx={};known={item['path'].casefold():item for item in release['manifest']}
         owners=claimed_paths(self.store.resources(),release)
         for relative in paths:
-            path_for(kind,relative);item=known.get(relative.casefold())
+            version_path(kind,relative,release['nx_version']);item=known.get(relative.casefold())
             if not item or item['path']!=relative:raise DomainError('Choose the exact canonical path from this release manifest, not a case alias.',409)
         try:export_path_casing(paths)
         except DomainError as error:conflicts.append({'path':'package_tree','reason':str(error)})
@@ -308,11 +338,15 @@ class FilePackages:
             if not 1<=item['size']<=MAX_BYTES:conflicts.append({'path':relative,'reason':'File must contain 1 byte to 20 MiB.'})
             else:
                 raw=file_content(source,item)
+                if legacy_fixture(kind,release['nx_version']) and relative.lower().endswith('.krx'):
+                    from .fixture_refs import bounded_descriptor
+                    try:krx[relative]=bounded_descriptor(raw)
+                    except DomainError as error:conflicts.append({'path':relative,'reason':str(error)})
                 if source.suffix.lower() in XML_SUFFIXES:
                     try:checked_xml(raw,PurePosixPath(relative).name)
                     except DomainError as error:conflicts.append({'path':relative,'reason':str(error)})
             try:
-                candidate=_baseline_file(root,sidt,kind,relative);stock=_baseline_sha256(candidate)
+                candidate=_baseline_file(root,sidt,kind,relative,release['nx_version']);stock=_baseline_sha256(candidate)
                 inputs[relative]={'sha256':stock,'baseline_path':str(candidate)}
                 if stock==item['sha256']:conflicts.append({'path':relative,'reason':'Unchanged Siemens/SIDT standard is not editable customer ownership.'})
             except DomainError as error:
@@ -320,6 +354,10 @@ class FilePackages:
                 conflicts.append({'path':relative,'reason':str(error)})
             if relative.casefold() in owners:conflicts.append({'path':relative,'reason':'File is already claimed by another managed resource.'})
             entries.append(item)
+        if legacy_fixture(kind,release['nx_version']) and any(path.startswith(LEGACY_FIXTURE_ROOT) for path in paths):
+            from .fixture_refs import validate_package
+            try:validate_package(entries,krx)
+            except DomainError as error:conflicts.append({'path':'fixture_references','reason':str(error)})
         if len(paths)+len(parent['asset_ids'] if parent else [])>100:conflicts.append({'path':'attachments','reason':'Combined attachments exceed 100; existing assignments are retained.'})
         report={'release_id':release_id,'kind':kind,'resource_id':resource_id,'expected_revision':parent['revision'] if parent else None,
             'commit_contract_version':1,'ownership_sha256':digest(owners),'parent_sha256':digest(parent),
@@ -371,7 +409,7 @@ class FilePackages:
                 path=item['path'];portable(path);key=path.casefold()
                 if key in seen or type(item['size']) is not int or item['size']<0 or not re.fullmatch('[a-f0-9]{64}',item['sha256']):raise ValueError()
                 seen.add(key)
-                if supported_file(kind,path):
+                if supported_file(kind,path,row['nx_version']):
                     files.append(item)
         except (ValueError,TypeError,KeyError,AttributeError,DomainError) as error:
             raise DomainError('Stored file manifest/catalog metadata is invalid.',409) from error
@@ -380,12 +418,12 @@ class FilePackages:
         page=[]
         for item in filtered[offset:offset+limit]:
             owner=owners.get(item['path'].casefold());reason=None
-            try:path_for(kind,item['path'])
+            try:version_path(kind,item['path'],row['nx_version'])
             except DomainError as error:reason=str(error)
             if not 1<=item['size']<=20*1024*1024:reason='File must contain 1 byte to 20 MiB.'
             if owner:reason='File is already reserved by a managed resource.'
             page.append({**item,'owner':owner,'selectable':reason is None,'unavailable_reason':reason})
-        return {'contract_version':2,'release_id':release_id,'kind':kind,'nx_version':row['nx_version'],'roots':ROOTS[kind],
+        return {'contract_version':2,'release_id':release_id,'kind':kind,'nx_version':row['nx_version'],'roots':roots_for(kind,row['nx_version']),
             'query':query,'offset':offset,'limit':limit,'total':len(files),'filtered':len(filtered),
             'manifest_sha256':digest(release['manifest']),'ownership_sha256':digest(owners),
             'snapshot':{'consistency':'sqlite_read_transaction','audit_head':dict(head) if head else {'sequence':0,'hash':'0'*64},

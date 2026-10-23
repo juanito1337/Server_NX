@@ -263,8 +263,8 @@ class Upgrades:
                 for library in request['libraries']:spec_for(library)
                 catalog_selection(request['libraries'],request.get('selection'))
             else:
-                from .filepackages import path_for
-                for path in request['paths']:path_for(request['kind'],path)
+                from .filepackages import version_path
+                for path in request['paths']:version_path(request['kind'],path,release['nx_version'])
             return {}
         return self._accept(request,mode,actor,validate,preview_hash=request.get('preview_hash'),request_key=request_key)
 

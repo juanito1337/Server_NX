@@ -103,7 +103,7 @@ class PreparedManifest(BaseModel):
     resource_hash:str=Field(pattern=r'^[a-f0-9]{64}$')
     input_sha256:str=Field(pattern=r'^[a-f0-9]{64}$')
     worker_hashes:dict[str,str]
-    nx_version:Literal['2512']
+    nx_version:Literal['2406','2512']
     tool_type:str
     automatic_cam_approval:Literal[False]
     root_library_id:str
@@ -179,7 +179,7 @@ def parse_package(content,job):
             objects={};cells=0
             for item in manifest['objects']:
                 cam=item['cam'];spec=spec_for(cam.get('library_id'))
-                if spec['kind'] not in ALLOWED_KINDS or cam.get('nx_version')!='2512' or not spec['graphics_dir']:
+                if spec['kind'] not in ALLOWED_KINDS or cam.get('nx_version')!=job['nx_version'] or not spec['graphics_dir']:
                     raise DomainError('Unsupported prepared library/version.')
                 table=cam_table(cam);key=next(iter(table.groups()));identity=(spec['id'],key)
                 if identity in objects:raise DomainError('Duplicate prepared native object.')
@@ -291,7 +291,7 @@ class Results:
    uebernehmen. Modellinventar ist externe unbeglaubigte Aussage; sechs Geometriepruefungen,
    NX-Test und fachliche Freigabe bleiben erforderlich. Der Server startet NX nicht.
 Ein echter NX-/Assistant-Nachweis fuer diese Journalversion steht noch aus.
-'''.replace('SAME','gleichen')).encode('utf-8-sig'))
+'''.replace('SAME','gleichen').replace('2512',job['nx_version'])).encode('utf-8-sig'))
             data=output.getvalue();value=hashlib.sha256(data).hexdigest()
             folder=offline_path(self.store.root/'geometry-results/collectors'/job_id/value)
             path=offline_path(folder/'collector.zip')
@@ -524,7 +524,7 @@ Ein echter NX-/Assistant-Nachweis fuer diese Journalversion steht noch aus.
                     use_models=is_parent or tool
                     selected_bindings=bindings if use_models else []
                     if use_models:attached.extend(asset['id'] for asset in assets)
-                    geometry={'mode':'nx_cam' if use_models else 'none','status':'needs_preparation','nx_version':'2512',
+                    geometry={'mode':'nx_cam' if use_models else 'none','status':'needs_preparation','nx_version':manifest['nx_version'],
                         'checks':{field:False for field in ('units','orientation','mount_point','cutting_geometry','non_cutting_geometry','collision_geometry')},
                         'evidence':'','asset_hashes':{}}
                     provenance={'result_id':key,'archive_sha256':result['sha256'],'root_part':identity[1]+'.prt',

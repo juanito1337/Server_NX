@@ -16,8 +16,10 @@ SCHEMA='''CREATE TABLE IF NOT EXISTS geometry_requests (
     PRIMARY KEY(actor,request_key))'''
 
 
-def request_hash(resource_id,revision,asset_id,tool_type):
-    return fingerprint([1,'geometry.job.create',resource_id,revision,asset_id,tool_type])
+def request_hash(resource_id,revision,asset_id,tool_type,nx_version='2512'):
+    # Preserve historical 2512 receipts byte-for-byte; other targets cannot replay them.
+    values=[1,'geometry.job.create',resource_id,revision,asset_id,tool_type]
+    return fingerprint(values if nx_version=='2512' else values+[nx_version])
 
 
 def response_value(row,job=None,version=None,asset=None):
@@ -29,14 +31,14 @@ def response_value(row,job=None,version=None,asset=None):
         value=json.loads(row['job_snapshot'])
         if not isinstance(value,dict) or fingerprint(value)!=row['snapshot_sha256']:raise ValueError()
         if key(row['job_id'])!=value['id'] or key(value['resource_id'])!=value['resource_id']:raise ValueError()
-        if value['contract_version']!=1 or value['status']!='awaiting_nx' or value['nx_version']!='2512':raise ValueError()
+        if value['contract_version']!=1 or value['status']!='awaiting_nx' or value['nx_version'] not in ('2406','2512'):raise ValueError()
         if type(value['resource_revision']) is not int or value['resource_revision']<1:raise ValueError()
         source=value['input'];key(source['id']);asset_filename(source['filename'])
         if type(source['size']) is not int or not 1<=source['size']<=20*1024*1024:raise ValueError()
         if type(value['package_size']) is not int or value['package_size']<=0:raise ValueError()
         for digest in (value['resource_hash'],value['package_sha256'],source['sha256'],*value['worker_hashes'].values()):
             if not isinstance(digest,str) or len(digest)!=64 or any(c not in '0123456789abcdef' for c in digest):raise ValueError()
-        if row['request_sha256']!=request_hash(value['resource_id'],value['resource_revision'],source['id'],value['tool_type']):raise ValueError()
+        if row['request_sha256']!=request_hash(value['resource_id'],value['resource_revision'],source['id'],value['tool_type'],value['nx_version']):raise ValueError()
         if type(row['owner_pid']) is not int or row['owner_pid']<=0 or row['created_at']!=value['created_at']:raise ValueError()
         if version is None or version['id']!=value['resource_id'] or version['revision']!=value['resource_revision']:raise ValueError()
         # resource_hash deliberately binds the exact original stored JSON bytes.
@@ -96,7 +98,7 @@ def commit(db,actor,request_key,job,stamp):
     if request_key is None:return {}
     row=db.execute('SELECT * FROM geometry_requests WHERE actor=? AND request_key=?',(actor,key(request_key))).fetchone()
     if (row is None or row['state']!='reserved' or row['job_id']!=job['id'] or row['snapshot_sha256']!=fingerprint(job)
-            or row['request_sha256']!=request_hash(job['resource_id'],job['resource_revision'],job['input']['id'],job['tool_type'])
+            or row['request_sha256']!=request_hash(job['resource_id'],job['resource_revision'],job['input']['id'],job['tool_type'],job['nx_version'])
             or row['job_snapshot']!=encoded(job)):
         raise DomainError('STEP package commit was fenced or its allocation changed; partial evidence retained.',409)
     db.execute('UPDATE geometry_requests SET state=?,updated_at=?,writer_finished_at=?,error=NULL WHERE actor=? AND request_key=?',

@@ -40,7 +40,7 @@ def _nx_verified_helper_modules(value,manifest_name,hash_field,files,module_path
     except (ValueError,UnicodeError) as error:raise RuntimeError('NX journal manifest is unreadable.') from error
     job=configuration if manifest_name=='job.json' else configuration.get('job') if isinstance(configuration,dict) else None
     hashes=configuration.get(hash_field) if isinstance(configuration,dict) else None
-    if (not isinstance(job,dict) or job.get('nx_version')!='2512' or
+    if (not isinstance(job,dict) or job.get('nx_version') not in ('2406','2512') or
             manifest_name=='job.json' and job.get('contract_version')!=1 or
             not isinstance(hashes,dict) or set(hashes)!=set(files) or
             any(not isinstance(item,str) or not _nx_boot_re.fullmatch('[a-f0-9]{64}',item) for item in hashes.values())):

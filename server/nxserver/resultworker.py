@@ -41,7 +41,8 @@ def collect(directory,session):
         if name not in ('nx_result_collect.py','nx_libraries.py','nx_safety.py','nx_result_inventory.py','stepfiles.py'):
             raise DomainError('Unknown collector helper.')
         read_bounded_file(directory/name,max_bytes=MAX_HELPER_BYTES,expected_sha256=expected,changed_message='Collector helper changed.')
-    check_environment(session)
+    job=configuration['job']
+    check_environment(session) if job['nx_version']=='2512' else check_environment(session,job['nx_version'])
     library=offline_path(directory/'return-library');root_key=configuration['root_key'];identifier=configuration['root_library_id']
     spec=SPECS[identifier];graphics=offline_path(library/spec['graphics_dir'])
     asset_filename(root_key+'.prt')
@@ -75,7 +76,7 @@ def collect(directory,session):
         if key in needed:continue
         if key[0] not in tables or key[1] not in tables[key[0]].groups():
             raise DomainError('Root/related native definition is missing from the local export: '+str(key))
-        records=tables[key[0]].groups()[key[1]];needed[key]=native_cam(key[0],'2512',tables[key[0]],records)
+        records=tables[key[0]].groups()[key[1]];needed[key]=native_cam(key[0],job['nx_version'],tables[key[0]],records)
         for record in records:
             for field,target_library in reference_targets(key[0]).items():
                 target=(target_library,record['values'].get(field,''))
@@ -93,10 +94,10 @@ def collect(directory,session):
     job=configuration['job']
     manifest={'contract_version':1,'job_id':job['id'],'resource_id':job['resource_id'],
         'resource_revision':job['resource_revision'],'resource_hash':job['resource_hash'],'input_sha256':job['input']['sha256'],
-        'worker_hashes':job['worker_hashes'],'nx_version':'2512','tool_type':job['tool_type'],'automatic_cam_approval':False,
+        'worker_hashes':job['worker_hashes'],'nx_version':job['nx_version'],'tool_type':job['tool_type'],'automatic_cam_approval':False,
         'root_library_id':configuration['root_library_id'],'root_key':root_key,'root_part':root_key+'.prt',
         'objects':[{'cam':cam} for cam in needed.values()],'parts':parts,'components':components,'files':files,
-        'collector':'NX2512 local inventory, unverified external evidence'}
+        'collector':'NX'+job['nx_version']+' local inventory, unverified external evidence'}
     output=offline_path(directory/'prepared-result.zip')
     if output.exists():raise DomainError('Prepared result already exists; use a fresh collector directory.')
     # The server limits the uncompressed manifest, not just the ZIP. Do not

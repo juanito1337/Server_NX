@@ -20,7 +20,7 @@ def ps_literal(value):
 def run_ps(source, **parameters):
     executable = offline_path(POWERSHELL)
     arguments = ' '.join('-' + key + ' ' + ps_literal(value) for key, value in parameters.items())
-    return subprocess.run([str(executable), '-NoProfile', '-NonInteractive', '-Command',
+    return subprocess.run([str(executable), '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command',
         '& {' + source + '} ' + arguments], capture_output=True, text=True, timeout=30)
 
 

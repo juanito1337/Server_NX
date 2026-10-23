@@ -7,14 +7,49 @@ import argparse
 import hashlib
 import json
 import os
+import re
+import subprocess
 from pathlib import Path
 import sys
+import time
 import uuid
+import xml.etree.ElementTree as ET
 
 SERVER = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SERVER))
 
-from nxserver.safety import offline_path
+from nxserver.safety import DomainError, offline_path, tree_files
+
+
+def source_manifest():
+    files={}
+    for folder in ('nxserver','tests','tools'):
+        for relative,path in tree_files(SERVER/folder):
+            if set(path.parts)&{'__pycache__','.pytest_cache','.mypy_cache','.ruff_cache'} or path.suffix=='.pyc':continue
+            files[folder+'/'+relative]=hashlib.sha256(path.read_bytes()).hexdigest()
+    for path in [*SERVER.glob('requirements*.txt'),SERVER.parent/'.github/workflows/tests.yml']:
+        path=offline_path(path)
+        if path.is_file():files[str(path.relative_to(SERVER.parent)).replace('\\','/')]=hashlib.sha256(path.read_bytes()).hexdigest()
+    # Read this checkout's ordinary metadata only, never follow a .git worktree
+    # pointer or inherit GIT_DIR/global config that could reference another drive.
+    commit=os.environ.get('GITHUB_SHA')
+    metadata=offline_path(SERVER.parent/'.git')
+    if metadata.is_dir():
+        head=offline_path(metadata/'HEAD').read_text(encoding='ascii').strip()
+        if re.fullmatch('[a-f0-9]{40}',head):commit=head
+        elif head.startswith('ref: '):
+            ref=head[5:]
+            if '..' in ref.split('/') or not re.fullmatch(r'refs/heads/[A-Za-z0-9_./-]+',ref):
+                raise DomainError('Unsupported checkout HEAD reference.')
+            loose=offline_path(metadata/ref)
+            if loose.is_file():commit=loose.read_text(encoding='ascii').strip()
+            else:
+                packed=offline_path(metadata/'packed-refs')
+                if packed.is_file():
+                    for line in packed.read_text(encoding='ascii').splitlines():
+                        if line.endswith(' '+ref):commit=line.split(' ',1)[0]
+    if commit is not None and not re.fullmatch('[a-f0-9]{40}',commit):raise DomainError('Invalid source commit metadata.')
+    return {'sha256':hashlib.sha256(json.dumps(files,sort_keys=True).encode()).hexdigest(),'files':files,'commit':commit}
 
 
 def suite_for(nodeid):
@@ -40,10 +75,11 @@ def select_ids(nodeids, suite, shard_index, shard_count):
 def test_environment(environment, suite):
     # Never inherit local NX opt-ins, credentials, pytest selection or plugins.
     result = {key: value for key, value in environment.items()
-              if not key.upper().startswith('NX_') and key not in
+              if not key.upper().startswith(('NX_', 'UGII_', 'UGCAM_', 'GIT_', 'NODE_')) and key not in
               ('PYTEST_ADDOPTS', 'PYTEST_PLUGINS', 'PYTHONPATH')}
     result.update(PYTHONIOENCODING='utf-8', PYTHONUNBUFFERED='1',
-                  PYTEST_DISABLE_PLUGIN_AUTOLOAD='1')
+                  PYTEST_DISABLE_PLUGIN_AUTOLOAD='1', GIT_CONFIG_NOSYSTEM='1',
+                  GIT_CONFIG_GLOBAL=os.devnull, GIT_ATTR_NOSYSTEM='1')
     if suite == 'browser':
         result['NX_BROWSER_TEST'] = '1'
     if suite == 'container':
@@ -55,17 +91,56 @@ def id_hash(values):
     return hashlib.sha256('\n'.join(sorted(values)).encode('utf-8')).hexdigest()
 
 
+def required_runtime(name, requested=None):
+    """Find only in the previously guarded PATH; never use the working directory."""
+    candidates = [requested] if requested else [str(Path(folder) / (name + ('.exe' if os.name == 'nt' else '')))
+        for folder in os.environ.get('PATH', '').split(os.pathsep) if folder]
+    executable = None
+    for candidate in candidates:
+        if not os.path.isabs(candidate):
+            raise DomainError('Runtime executable requires an absolute local path.')
+        path = offline_path(candidate)  # Lexical rejection precedes every lookup.
+        if path.is_file():
+            executable = path
+            break
+    if executable is None:
+        raise DomainError(name + ' is required for the full core suite; specify --' + name + '-executable.')
+    environment = dict(os.environ, GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
+    try:
+        result = subprocess.run([str(executable), '--version'], env=environment,
+            capture_output=True, text=True, encoding='utf-8', timeout=15, check=True)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise DomainError(name + ' runtime preflight failed.') from error
+    version = result.stdout.strip()
+    pattern = r'v24\.\d+\.\d+' if name == 'node' else r'git version [0-9]+\.[0-9]+(?:\.[A-Za-z0-9.-]+)?'
+    if not re.fullmatch(pattern, version):
+        raise DomainError('Unsupported ' + name + ' runtime; Node.js 24 and an ordinary Git CLI are required.')
+    # The existing tests discover runtimes with shutil.which(). Change only this
+    # runner process and its children, never the user's Windows PATH setting.
+    os.environ['PATH'] = str(executable.parent) + os.pathsep + os.environ.get('PATH', '')
+    return {'path': str(executable), 'version': version}
+
+
 def write_json(path, value):
     with offline_path(path).open('x', encoding='utf-8') as stream:
         json.dump(value, stream, ensure_ascii=False, sort_keys=True, indent=2)
 
 
 class Evidence:
-    def __init__(self, directory, suite, index, count):
+    def __init__(self, directory, suite, index, count, source=None):
         self.directory, self.suite = directory, suite
         self.index, self.count = index, count
         self.plan, self.outcomes, self.errors = None, {}, []
         self.collection_errors = []
+        self.infrastructure_errors = []
+        self.runtimes = {}
+        self.source=source
+        # Tests intentionally replace Path.open/lstat to prove that protected
+        # paths are never touched. Keep evidence on a prevalidated owned handle,
+        # independent of application filesystem doubles active during the call.
+        self.events=offline_path(directory/'events.jsonl').open('x',encoding='utf-8')
+        self.encode=json.dumps
+        self.clock=time.time_ns
 
     def pytest_collectreport(self, report):
         if report.failed:
@@ -88,12 +163,19 @@ class Evidence:
                      'selected_sha256': id_hash(selected), 'ids': selected,
                      'github_sha': os.environ.get('GITHUB_SHA'),
                      'licensed_inputs_enabled': False, 'automatic_deployment': False}
+        self.plan.update(python_version=sys.version,platform=sys.platform,source=self.source,runtimes=self.runtimes)
         write_json(self.directory / 'plan.json', self.plan)
         deselected = [item for item in items if item.nodeid not in chosen]
         items[:] = [item for item in items if item.nodeid in chosen]
         config.hook.pytest_deselected(items=deselected)
 
     def pytest_runtest_logreport(self, report):
+        # Keep progress if interrupted before pytest publishes final JUnit.
+        event={'id':report.nodeid,'phase':report.when,'outcome':report.outcome,
+               'duration':getattr(report,'duration',0),'time_ns':self.clock()}
+        if report.failed or report.skipped:event['reason']=str(report.longrepr)[:2000]
+        self.events.write(self.encode(event,ensure_ascii=False)+'\n')
+        self.events.flush()
         if report.failed:
             self.outcomes[report.nodeid] = 'failed' if report.when == 'call' else 'error'
         elif report.skipped and self.outcomes.get(report.nodeid) not in ('failed', 'error'):
@@ -105,6 +187,9 @@ class Evidence:
                                 'outcome': report.outcome, 'reason': str(report.longrepr)[:2000]})
 
     def finish(self, exit_code, collected_only=False):
+        self.events.close()
+        try:stable=source_manifest()==self.source if self.source is not None else None
+        except (OSError,DomainError):stable=False
         expected = set(self.plan['ids']) if self.plan else set()
         actual = set(self.outcomes)
         complete = bool(expected) and expected == actual and not collected_only
@@ -114,16 +199,27 @@ class Evidence:
         result = int(exit_code) if exit_code else (0 if valid else 3)
         if not result and (counts['failed'] or counts['error']):
             result = 1
+        if stable is False:result=result or 3
         summary = {'contract_version': 1, 'suite': self.suite, 'shard_index': self.index,
                    'shard_count': self.count, 'exit_code': result, 'counts': counts,
                    'collected_only': collected_only, 'execution_complete': complete,
                    'missing': sorted(expected - actual), 'unexpected': sorted(actual - expected),
                    'skips_and_failures': self.errors, 'collection_errors': self.collection_errors,
+                   'infrastructure_errors': self.infrastructure_errors, 'runtimes': self.runtimes,
                    'automatic_deployment': False}
+        summary.update(source_stable=stable,source_sha256=self.source['sha256'] if self.source else None)
         write_json(self.directory / 'summary.json', summary)
         print(json.dumps({key: value for key, value in summary.items()
                           if key not in ('missing', 'unexpected', 'skips_and_failures', 'collection_errors')}))
         return result
+
+    def infrastructure_failure(self, message):
+        self.infrastructure_errors.append(message)
+        suite = ET.Element('testsuite', name='runtime preflight', tests='1', errors='1', failures='0')
+        case = ET.SubElement(suite, 'testcase', name='required-runtime')
+        ET.SubElement(case, 'error', type='infrastructure', message=message)
+        ET.ElementTree(suite).write(self.directory / 'junit.xml', encoding='utf-8', xml_declaration=True)
+        return self.finish(2)
 
 
 def main(arguments=None, *, test_root=None):
@@ -133,6 +229,8 @@ def main(arguments=None, *, test_root=None):
     parser.add_argument('--shard-count', type=int, default=1)
     parser.add_argument('--report-dir', default=str(SERVER / 'test-results'))
     parser.add_argument('--collect-only', action='store_true')
+    parser.add_argument('--node-executable', help='Absolute local Node.js 24 executable, for the core suite.')
+    parser.add_argument('--git-executable', help='Absolute local Git executable, for the core suite.')
     options = parser.parse_args(arguments)
     try:
         select_ids([], options.suite, options.shard_index, options.shard_count)
@@ -158,15 +256,22 @@ def main(arguments=None, *, test_root=None):
     directory = offline_path(directory / (options.suite + '-' + str(options.shard_index) + '-' + uuid.uuid4().hex))
     directory.mkdir(exist_ok=False)
     print('Test evidence: ' + str(directory), flush=True)
-    if options.suite == 'browser' and not options.collect_only:
-        # Missing Playwright/Edge is an infrastructure error, not hundreds of skips.
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(channel='msedge', headless=True)
-            browser.close()
+    evidence = Evidence(directory, options.suite, options.shard_index, options.shard_count, source_manifest())
+    try:
+        if not options.collect_only:
+            if options.suite == 'core' and test_root is None:
+                evidence.runtimes = {name: required_runtime(name, getattr(options, name + '_executable'))
+                                     for name in ('node', 'git')}
+            if options.suite == 'browser':
+                # Missing Playwright/Edge is an infrastructure error, not hundreds of skips.
+                from playwright.sync_api import sync_playwright
+                with sync_playwright() as playwright:
+                    browser = playwright.chromium.launch(channel='msedge', headless=True)
+                    browser.close()
+    except Exception as error:
+        return evidence.infrastructure_failure(str(error))
     import pytest
     root = offline_path(test_root or SERVER / 'tests')
-    evidence = Evidence(directory, options.suite, options.shard_index, options.shard_count)
     args = [str(root), '--rootdir=' + str(root.parent), '-q', '--tb=short',
             '--junitxml=' + str(directory / 'junit.xml')]
     if options.collect_only:

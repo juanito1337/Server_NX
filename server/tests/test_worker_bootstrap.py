@@ -82,10 +82,21 @@ def test_bad_manifest_blocks_bootstrap_before_nx_or_output(local_package,change)
         value=json.loads(path.read_text(encoding='utf-8'))
         if change=='missing_hash':value['worker_hashes'].pop('stepfiles.py')
         elif change=='bad_hash':value['worker_hashes']['stepfiles.py']='bad-hash'
-        else:value['nx_version']='2406'
+        else:value['nx_version']='2606'
         path.write_text(json.dumps(value),encoding='utf-8')
     with pytest.raises(RuntimeError):execute(directory)
     assert not (directory/'output').exists()
+
+
+@pytest.mark.parametrize('version',['2406','2512'])
+def test_supported_target_versions_bootstrap_without_importing_nx(local_package,version):
+    directory,_,_=local_package;path=directory/'job.json'
+    value=json.loads(path.read_text(encoding='utf-8'));value['nx_version']=version
+    path.write_text(json.dumps(value),encoding='utf-8')
+    before=set(sys.modules)
+    result=execute(directory)
+    assert callable(result['run_job']) and not (directory/'output').exists()
+    assert not any(name.startswith('NXOpen') for name in set(sys.modules)-before)
 
 
 def test_matching_timestamp_pyc_is_ignored_in_favour_of_verified_source(local_package,tmp_path):

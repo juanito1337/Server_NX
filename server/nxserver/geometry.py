@@ -76,7 +76,7 @@ fremden Import-Caches oder benachbarten pyc-Dateien. Alte gespeicherte ZIPs
 bleiben unveraendert; fuer den neuen Startschutz einen neuen Auftrag anlegen.
 STEP-Lesen ist auf20MiB/Groesse/SHA gebunden. Ein Hash ist keine Signatur gegen
 einen Administrator, der zugleich Manifest und Programme veraendern kann.
-'''
+'''.replace('2512',job['nx_version'])
 
 
 class GeometryJobs:
@@ -92,22 +92,24 @@ class GeometryJobs:
             raise DomainError('Select a STEP/STP/P21 attachment.')
         return {'asset': metadata, **preflight(content)}, content
 
-    def create(self, resource_id, expected_revision, asset_id, tool_type, actor,request_key=None):
+    def create(self, resource_id, expected_revision, asset_id, tool_type, actor,request_key=None, nx_version='2512'):
+        if nx_version not in ('2406', '2512'):
+            raise DomainError('Unsupported NX target version.')
         # Legacy callers have no durable allocation for backup to observe.
         # Keep their whole physical write under the in-process store gate.
         if request_key is None:
             from .asset_requests import backup_active
             if backup_active(self.store):raise DomainError('Backup/recovery writer is active; STEP package allocation must wait.',409)
             with self.store.lock:
-                return self._create(resource_id,expected_revision,asset_id,tool_type,actor)
-        return self._create(resource_id,expected_revision,asset_id,tool_type,actor,request_key)
+                return self._create(resource_id,expected_revision,asset_id,tool_type,actor,nx_version=nx_version)
+        return self._create(resource_id,expected_revision,asset_id,tool_type,actor,request_key,nx_version)
 
-    def _create(self, resource_id, expected_revision, asset_id, tool_type, actor,request_key=None):
+    def _create(self, resource_id, expected_revision, asset_id, tool_type, actor,request_key=None,nx_version='2512'):
         from . import geometry_requests as receipts
         from .write_requests import key
         from .asset_requests import backup_active
         request_key=key(request_key)
-        digest=receipts.request_hash(resource_id,expected_revision,asset_id,tool_type)
+        digest=receipts.request_hash(resource_id,expected_revision,asset_id,tool_type,nx_version)
         if request_key is not None:
             with self.store.db() as db:
                 db.execute('BEGIN');cached=receipts.replay(db,actor,request_key,digest)
@@ -137,7 +139,7 @@ class GeometryJobs:
             job = {'contract_version': 1, 'id': str(uuid.uuid4()), 'resource_id': resource_id,
                    'resource_revision': row['revision'], 'resource_hash': hashlib.sha256(row['payload'].encode()).hexdigest(),
                    'resource_name': resource['name'], 'cam_snapshot': resource.get('cam', {}),
-                   'nx_version': '2512', 'tool_type': tool_type, 'input': preview['asset'],
+                   'nx_version': nx_version, 'tool_type': tool_type, 'input': preview['asset'],
                    'preflight': preview, 'status': 'awaiting_nx', 'created_at': now(),
                    'worker_hashes': {name: hashlib.sha256(data).hexdigest() for name, data in workers.items()}}
             job['input'] = {**job['input'], 'protocol': preview['protocol']}

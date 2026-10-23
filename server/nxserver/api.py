@@ -378,6 +378,7 @@ class GeometryJobInput(StrictModel):
     expected_revision: int = Field(ge=1)
     asset_id: str = Field(min_length=1, max_length=36)
     tool_type: str = Field(min_length=1, max_length=50)
+    nx_version: Literal['2406', '2512'] = '2512'
 
 
 class GeometryReportInput(StrictModel):
@@ -592,6 +593,7 @@ def create_app(store: Store, admin_token: str, erp_token: str | None = None):
                 'nx_file_packages':{'kinds':['template','ui_standard','machine','fixture'],'versioned':True,
                     'preflight_contract':1,'preflight_read_only':True,'preflight_total_bytes':128*1024*1024,
                     'pax_reference_contract':1,'pax_commit_byte_gate':True,'pax_path_rewrites':False,
+                    'nx2406_krx_contract':1,'nx2406_krx_commit_byte_gate':True,
                     'final_adoption_commit_gate':True,'source_and_baseline_bound':True,'current_ownership_bound':True,
                     'standard_path_only':True,'existing_file_adoption':True,'four_manual_checks':True,
                     'automatic_approval':False,'script_execution':False,'overwrite_unowned':False},
@@ -623,7 +625,7 @@ def create_app(store: Store, admin_token: str, erp_token: str | None = None):
                                          'sidt_version_contract_version':1,
                                          'static_extraction':True,'extraction_worker':'windows_pinned_innounp',
                                          'installer_execution':False,'automatic_activation':False},
-                'geometry_preparation': {'mode': 'offline_nx_import_package', 'nx_versions': ['2512'],
+                'geometry_preparation': {'mode': 'offline_nx_import_package', 'nx_versions': ['2406','2512'],
                                          'tool_types': TOOL_TYPES, 'automatic_cam_approval': False,
                                          'nx_execution_verified': False, 'assistant_batch_api_documented': False},
                 'geometry_requests':{'contract_version':1,'durable_package_intents':True,'atomic_job_receipt':True,
@@ -972,7 +974,9 @@ def create_app(store: Store, admin_token: str, erp_token: str | None = None):
     @app.post('/api/v1/geometry-jobs', status_code=201)
     def create_geometry_job(value: GeometryJobInput, actor=Depends(admin),idempotency_key:str|None=Header(None,min_length=36,max_length=36)):
         args=(value.resource_id,value.expected_revision,value.asset_id,value.tool_type,actor)
-        return geometry_jobs.create(*args,request_key=idempotency_key) if idempotency_key is not None else geometry_jobs.create(*args)
+        options = {'nx_version': value.nx_version} if value.nx_version != '2512' else {}
+        if idempotency_key is not None: options['request_key'] = idempotency_key
+        return geometry_jobs.create(*args, **options)
 
     @app.get('/api/v1/geometry-requests/{request_key}')
     def geometry_request_receipt(request_key:str,actor=Depends(admin)):

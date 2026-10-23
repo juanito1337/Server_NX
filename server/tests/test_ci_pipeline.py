@@ -50,12 +50,18 @@ def test_environment_never_inherits_local_keys_or_licensed_optins(suite):
               'NX_EXTRACTOR_TEST': '1', 'NX_COMPOSE_BIN': 'unused', 'NX_DOCKER_TEST': '1',
               'NX_BROWSER_TEST': '1', 'PYTEST_ADDOPTS': '-k hidden_subset',
               'PYTEST_PLUGINS': 'untrusted', 'PYTHONPATH': 'untrusted', 'KEEP_ME': 'yes'}
+    source.update(GIT_DIR='W:/never-look-up',GIT_CONFIG_GLOBAL='W:/never-read',
+                  NODE_OPTIONS='--require W:/never-load.js',NODE_PATH='W:/never-search',
+                  UGII_BASE_DIR='W:/never-inspect',UGCAM_LIBRARY_PATH='W:/never-inherit')
     result = ci.test_environment(source, suite)
     assert result['KEEP_ME'] == 'yes' and source['NX_ADMIN_TOKEN'] == 'synthetic-not-a-live-key'
     expected = {'NX_BROWSER_TEST': '1'} if suite == 'browser' else {'NX_DOCKER_TEST': '1'} if suite == 'container' else {}
     assert {key: value for key, value in result.items() if key.startswith('NX_')} == expected
     assert not {'PYTEST_ADDOPTS', 'PYTEST_PLUGINS', 'PYTHONPATH'} & result.keys()
     assert result['PYTEST_DISABLE_PLUGIN_AUTOLOAD'] == '1'
+    assert result['GIT_CONFIG_GLOBAL']==os.devnull and result['GIT_CONFIG_NOSYSTEM']=='1'
+    assert not any(key.upper().startswith(('NODE_','UGII_','UGCAM_')) for key in result)
+    assert 'GIT_DIR' not in result and 'W:' not in str(result)
 
 
 def prepared(tmp_path, ids=('tests/test_one.py::test_one',)):
@@ -81,6 +87,19 @@ def test_missing_execution_cannot_be_success_even_with_zero_pytest_exit(tmp_path
     assert not summary['execution_complete'] and len(summary['missing']) == 1
 
 
+@pytest.mark.parametrize('unreadable',[False,True])
+def test_changed_or_unreadable_sources_invalidate_an_otherwise_passing_run(tmp_path,monkeypatch,unreadable):
+    evidence=prepared(tmp_path);evidence.source={'sha256':'original','files':{}}
+    evidence.outcomes={'tests/test_one.py::test_one':'passed'}
+    def current():
+        if unreadable:raise OSError('Synthetic removed source')
+        return {'sha256':'changed','files':{}}
+    monkeypatch.setattr(ci,'source_manifest',current)
+    assert evidence.finish(0)==3
+    summary=json.loads((tmp_path/'summary.json').read_text())
+    assert summary['execution_complete'] and summary['source_stable'] is False
+
+
 def test_teardown_failure_overrides_a_passing_call(tmp_path):
     evidence = prepared(tmp_path)
     for phase, failed in [('call', False), ('teardown', True)]:
@@ -97,7 +116,7 @@ def test_original_pytest_failure_codes_are_not_hidden(tmp_path, code):
     assert prepared(tmp_path).finish(code) == code
 
 
-@pytest.mark.parametrize('mode', ['pass', 'fail', 'skip', 'collection_error', 'collect_only'])
+@pytest.mark.parametrize('mode', ['pass', 'fail', 'skip', 'collection_error', 'collect_only','io_guard'])
 def test_real_runner_records_pytest_outcome_without_loading_real_project_tests(tmp_path, mode):
     fixture = tmp_path / 'fixture';fixture.mkdir()
     if mode == 'collection_error':
@@ -106,6 +125,8 @@ def test_real_runner_records_pytest_outcome_without_loading_real_project_tests(t
         text = 'import pytest\n\ndef test_fixture():\n    pytest.skip("Synthetic platform skip")\n'
     elif mode == 'fail':
         text = 'def test_fixture():\n    assert False, "Synthetic expected failure"\n'
+    elif mode == 'io_guard':
+        text = 'from pathlib import Path\nimport pytest\ndef test_fixture(monkeypatch):\n    monkeypatch.setattr(Path,"open",lambda *a,**k:pytest.fail("Guarded application filesystem must not be used by the evidence writer"))\n'
     else:
         text = 'import os\n\ndef test_fixture():\n    assert "NX_ADMIN_TOKEN" not in os.environ\n    assert "NX_EXTRACTOR_TEST" not in os.environ\n'
     (fixture / 'test_fixture.py').write_text(text, encoding='utf-8')
@@ -128,7 +149,11 @@ def test_real_runner_records_pytest_outcome_without_loading_real_project_tests(t
     if mode == 'collection_error':
         assert summary['collection_errors'] and not (reports[0] / 'plan.json').exists()
     if mode not in ('collect_only', 'collection_error'):
-        assert summary['counts'][{'pass': 'passed', 'fail': 'failed', 'skip': 'skipped'}[mode]] == 1
+        assert summary['counts'][{'pass': 'passed', 'fail': 'failed', 'skip': 'skipped','io_guard':'passed'}[mode]] == 1
+        events=[json.loads(line) for line in (reports[0]/'events.jsonl').read_text(encoding='utf-8').splitlines()]
+        calls=[event for event in events if event['phase']=='call']
+        assert len(calls)==1 and calls[0]['outcome']=={'pass':'passed','fail':'failed','skip':'skipped','io_guard':'passed'}[mode]
+        assert all('synthetic-ci-test-only' not in json.dumps(event) for event in events)
 
 
 def test_workflow_uses_pinned_actions_and_has_no_deployment_or_error_bypass():
@@ -143,3 +168,52 @@ def test_workflow_uses_pinned_actions_and_has_no_deployment_or_error_bypass():
     assert '--suite browser --shard-count 4' in workflow
     assert "github.event_name == 'workflow_dispatch' && inputs.container_test" in workflow
     assert "value != 'success'" in workflow
+
+
+@pytest.mark.parametrize('name,version', [('node','v24.19.0'),('git','git version 2.49.0.windows.1')])
+def test_runtime_preflight_binds_version_and_discovery_to_the_guarded_executable(tmp_path,monkeypatch,name,version):
+    executable=tmp_path/(name+('.exe' if os.name=='nt' else ''));executable.write_bytes(b'inert executable fixture')
+    monkeypatch.setenv('PATH',str(tmp_path))
+    calls=[]
+    def run(command,**options):
+        calls.append((command,options));return SimpleNamespace(stdout=version+'\n')
+    monkeypatch.setattr(ci.subprocess,'run',run)
+    result=ci.required_runtime(name,str(executable))
+    assert result=={'path':str(executable),'version':version}
+    assert calls[0][0]==[str(executable),'--version'] and calls[0][1]['timeout']==15
+    assert calls[0][1]['env']['GIT_CONFIG_GLOBAL']==os.devnull
+    assert os.environ['PATH'].split(os.pathsep)[0]==str(executable.parent)
+
+
+@pytest.mark.parametrize('path',[r'W:\not-accessed\node.exe',r'\\not-accessed\share\node.exe','file:///W:/node.exe'])
+def test_runtime_rejects_protected_text_before_any_filesystem_lookup(monkeypatch,path):
+    from nxserver.safety import DomainError
+    monkeypatch.setattr(Path,'lstat',lambda *a,**k:pytest.fail('No lookup is permitted for rejected input.'))
+    with pytest.raises(DomainError):ci.required_runtime('node',path)
+
+
+def test_missing_or_wrong_node_runtime_cannot_become_skipped_javascript_checks(tmp_path,monkeypatch):
+    from nxserver.safety import DomainError
+    monkeypatch.setenv('PATH',str(tmp_path))
+    with pytest.raises(DomainError,match='required for the full core'):ci.required_runtime('node')
+    executable=tmp_path/'node.exe';executable.write_bytes(b'inert')
+    monkeypatch.setattr(ci.subprocess,'run',lambda *a,**k:SimpleNamespace(stdout='v22.0.0\n'))
+    with pytest.raises(DomainError,match='Unsupported node'):ci.required_runtime('node',str(executable))
+
+
+def test_failed_runtime_preflight_emits_error_evidence_before_test_collection(tmp_path,monkeypatch):
+    from nxserver.safety import DomainError
+    def missing(*a,**k):raise DomainError('Required runtime is unavailable.')
+    monkeypatch.setattr(ci,'required_runtime',missing)
+    monkeypatch.setattr(ci,'source_manifest',lambda:{'sha256':'inert-source','files':{}})
+    monkeypatch.setattr(os,'chdir',lambda *a:pytest.fail('Collection must not begin.'))
+    # main changes only its process environment; restore it for sibling tests.
+    with monkeypatch.context() as context:
+        context.setattr(os,'environ',dict(os.environ))
+        assert ci.main(['--suite','core','--report-dir',str(tmp_path)])==2
+    directory=next(tmp_path.glob('core-*'));summary=json.loads((directory/'summary.json').read_text())
+    assert not summary['execution_complete'] and summary['counts']['passed']==0
+    assert summary['infrastructure_errors']==['Required runtime is unavailable.']
+    import xml.etree.ElementTree as ET
+    junit=ET.parse(directory/'junit.xml').getroot()
+    assert junit.attrib['errors']=='1' and not junit.findall('.//skipped')

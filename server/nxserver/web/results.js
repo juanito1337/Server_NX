@@ -78,7 +78,7 @@ globalThis.NXResults=(()=>{
     const prefix=saved.kind==='tool_assembly'?'tool_assembly':'tool';options(el('result-library'),Object.fromEntries(['metric','english'].map(unit=>[prefix+'-'+unit,prefix+'-'+unit])));
     if(saved.cam.library_id)el('result-library').value=saved.cam.library_id;
     el('result-key').value=saved.cam.values?.LIBRF||saved.cam.records?.[0]?.values.LIBRF||'';
-    options(el('result-target'),{'':'Zielstand wählen',...Object.fromEntries(releases.filter(r=>r.nx_version==='2512'&&!['failed','building'].includes(r.status)).map(r=>[r.id,r.name]))});
+    options(el('result-target'),{'':'Zielstand wählen',...Object.fromEntries(releases.filter(r=>r.nx_version===value.nx_version&&!['failed','building'].includes(r.status)).map(r=>[r.id,r.name]))});
     observedContext=context();
     el('result-state').textContent=value.resource_revision===saved.revision?'Auftrag '+value.id+': lokalen NX-Export vorbereiten oder Ergebnispaket wählen.':'Ältere Revision: Paket nur historisch ansehen; für Übernahme einen neuen Auftrag anlegen.';await packets(current);controls();
   }

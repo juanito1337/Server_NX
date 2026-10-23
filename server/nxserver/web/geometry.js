@@ -23,7 +23,7 @@ globalThis.NXGeometry = (() => {
     knownCommit=job;controls();const verified=await api('geometry-jobs/'+job.id+'/package-metadata');
     if(session!==connectionGeneration||ticket?.key!==own.key)return;
     if(verified.job_id!==job.id||verified.sha256!==job.package_sha256||verified.size!==job.package_size||verified.files_verified!==true)throw new Error('STEP-Paketverifikation passt nicht zum ursprünglichen Beleg.');
-    const same=memory?.generation===generation&&selected?.id===job.resource_id&&selected?.revision===job.resource_revision&&el('step-asset').value===memory?.body.asset_id&&el('step-tool-type').value===memory?.body.tool_type;
+    const same=memory?.generation===generation&&selected?.id===job.resource_id&&selected?.revision===job.resource_revision&&el('step-asset').value===memory?.body.asset_id&&el('step-tool-type').value===memory?.body.tool_type&&el('step-nx-version').value===(memory?.body.nx_version||'2512');
     clearTicket();let refreshError='';if(selected?.id===job.resource_id){try{await loadJobs();}catch(error){if(!NXRequests.isStale(error))refreshError=' Auftragsbestand manuell aktualisieren: '+error.message;}}
     if(session!==connectionGeneration)return;details(job);message('Auftrag registriert; Importpaket SHA-256-geprüft. '+(same?'Importpaket herunterladen; Werkzeug bleibt Entwurf.':'Aktuelle Auswahl und Eingaben bleiben erhalten. Ursprünglichen Auftrag im Auftragsbestand auswählen.')+' Kein NX-Import, CAM-Export oder fachlicher Nachweis ausgeführt.'+refreshError,Boolean(refreshError));
   }
@@ -108,7 +108,7 @@ globalThis.NXGeometry = (() => {
   el('step-job-create').onclick = () => operation(async session => {
     if(!supported||ticket||storageError)throw new Error('Unbestätigten STEP-Auftrag erst klären oder Server aktualisieren.');
     if (!selected || !el('step-asset').value) throw new Error('Gespeicherten Werkzeugentwurf mit STEP-Anhang wählen.');
-    const body={resource_id:selected.id,expected_revision:selected.revision,asset_id:el('step-asset').value,tool_type:el('step-tool-type').value};
+    const body={resource_id:selected.id,expected_revision:selected.revision,asset_id:el('step-asset').value,tool_type:el('step-tool-type').value,nx_version:el('step-nx-version').value};
     const own={contract_version:1,key:crypto.randomUUID(),created_at:new Date().toISOString()};sessionStorage.setItem(storageKey,JSON.stringify(own));ticket=own;memory={generation,body};controls();
     await confirmed(own,await send(own,body,session),session);
   });
