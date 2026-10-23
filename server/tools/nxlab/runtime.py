@@ -4,8 +4,10 @@ import contextlib
 import hashlib
 import json
 import os
+from pathlib import Path
 import re
 import secrets
+import site
 import socket
 import subprocess
 import sys
@@ -17,6 +19,25 @@ import uuid
 from .guard import Blocked, local
 
 SERVER=local(__file__).parents[2]
+
+
+def server_python():
+    """Use the current server interpreter without following a supplied link.
+
+    Linux setup-python exposes a symlink alias. The kernel gives the image
+    already executing in this process. Start that regular image with explicit,
+    guarded site folders, bypassing automatic site/.pth/user configuration.
+    Model, input and output symlink restrictions remain unchanged.
+    """
+    nominal=Path(sys.executable);local(nominal.parent)
+    if sys.platform!='linux':return local(nominal),[],{}
+    executable=local(os.readlink('/proc/self/exe'))
+    folders=[str(local(folder)) for folder in site.getsitepackages()]
+    if not folders:raise Blocked('No explicit server Python site-packages are available.')
+    environment={'PYTHONPATH':os.pathsep.join(folders)}
+    library=local(executable.parent.parent/'lib')
+    if library.is_dir():environment['LD_LIBRARY_PATH']=str(library)
+    return executable,['-s','-S'],environment
 
 
 def unavailable_license(text):
@@ -34,6 +55,7 @@ class Server:
         self.opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     def __enter__(self):
+        executable,python_flags,python_environment=server_python()
         settings=local(self.directory/'settings.local.json')
         settings.write_text(json.dumps({'data_dir':str(self.data),'sources':self.sources,'standards':self.standards,
                                        'source_roots':{},'target_roots':{},'logs':{}}),encoding='utf-8')
@@ -43,10 +65,11 @@ class Server:
         environment={key:value for key,value in os.environ.items()
                      if key.upper() in ('SYSTEMROOT','WINDIR','COMSPEC')}
         environment.update(NX_ADMIN_TOKEN=self.token,PYTHONIOENCODING='utf-8',PYTHONUNBUFFERED='1',
-                           PATH=str(local(sys.executable).parent)+os.pathsep+r'C:\Windows\System32',
+                           PATH=str(executable.parent)+(os.pathsep+r'C:\Windows\System32' if os.name=='nt' else ''),
                            TEMP=str(self.directory),TMP=str(self.directory))
+        environment.update(python_environment)
         self.log=local(self.directory/'server.log').open('wb')
-        self.process=subprocess.Popen([str(local(sys.executable)),'-m','nxserver','--settings',str(settings),
+        self.process=subprocess.Popen([str(executable),*python_flags,'-m','nxserver','--settings',str(settings),
                                        '--port',str(port)],cwd=SERVER,env=environment,
                                       stdout=self.log,stderr=subprocess.STDOUT)
         try:

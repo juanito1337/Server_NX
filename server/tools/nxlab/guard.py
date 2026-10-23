@@ -17,8 +17,12 @@ def local(value):
     text=str(value).replace('\\','/')
     if text!=text.strip() or not text or '\x00' in text or '..' in text.split('/'):
         raise DomainError('An ordinary absolute local path is required.')
-    if os.name=='nt' and not re.match(r'(?i)^c:/',text):
-        raise DomainError('NX lab accepts only absolute C: paths; no other drive is inspected.')
+    # Hosted Windows runners use D:. The lab's data may live on any ordinary
+    # local drive; offline_path rejects W: lexically and mapped network drives
+    # before any ancestor lookup. Real NX installation/job roots remain pinned
+    # separately to C:/Siemens and C:/NX_Migration/ToolJobs.
+    if os.name=='nt' and not re.match(r'(?i)^[a-vx-z]:/',text):
+        raise DomainError('NX lab requires an absolute local drive path.')
     if os.name!='nt' and not text.startswith('/'):
         raise DomainError('An absolute path is required.')
     return offline_path(value)

@@ -77,6 +77,48 @@ def test_inherited_production_environment_is_not_propagated(tmp_path):
     assert result['SPLM_LICENSE_SERVER']=='28000@licenses.example'
 
 
+def test_hosted_local_d_drive_delegates_to_the_same_offline_guard(monkeypatch):
+    from pathlib import PureWindowsPath
+    from types import SimpleNamespace
+    from tools.nxlab import guard
+    calls=[]
+    monkeypatch.setattr(guard,'os',SimpleNamespace(name='nt'))
+    def checked(value):calls.append(value);return PureWindowsPath(value)
+    monkeypatch.setattr(guard,'offline_path',checked)
+    assert guard.local('D:/a/Server_NX')==PureWindowsPath('D:/a/Server_NX')
+    assert calls==['D:/a/Server_NX']
+    for value in ('W:/production','D:relative','//host/share'):
+        with pytest.raises(DomainError):guard.local(value)
+    assert calls==['D:/a/Server_NX'] # Rejected inputs never reached filesystem guarding.
+
+
+def test_linux_server_uses_its_loaded_image_and_explicit_guarded_sites(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from tools.nxlab import runtime
+    alias=tmp_path/'venv/bin';alias.mkdir(parents=True)
+    image=tmp_path/'base/bin/python';image.parent.mkdir(parents=True);image.write_bytes(b'inert image fixture')
+    library=tmp_path/'base/lib';library.mkdir();packages=tmp_path/'venv/lib/site-packages';packages.mkdir(parents=True)
+    monkeypatch.setattr(runtime,'sys',SimpleNamespace(platform='linux',executable=str(alias/'python')))
+    calls=[]
+    def loaded(path):calls.append(path);return str(image)
+    monkeypatch.setattr(runtime.os,'readlink',loaded)
+    monkeypatch.setattr(runtime.site,'getsitepackages',lambda:[str(packages)])
+    executable,flags,environment=runtime.server_python()
+    assert executable==image and flags==['-s','-S'] and calls==['/proc/self/exe']
+    assert environment=={'PYTHONPATH':str(packages),'LD_LIBRARY_PATH':str(library)}
+    assert not (alias/'python').exists() # No alias was followed or executed.
+
+
+def test_linux_server_does_not_inherit_a_protected_site_folder(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from tools.nxlab import runtime
+    image=tmp_path/'python';image.write_bytes(b'inert image fixture')
+    monkeypatch.setattr(runtime,'sys',SimpleNamespace(platform='linux',executable=str(image)))
+    monkeypatch.setattr(runtime.os,'readlink',lambda value:str(image))
+    monkeypatch.setattr(runtime.site,'getsitepackages',lambda:['W:/never-read/site-packages'])
+    with pytest.raises(DomainError):runtime.server_python()
+
+
 def test_bad_license_path_and_same_account_cannot_start_nx(tmp_path,monkeypatch):
     with pytest.raises(Blocked):nx_environment(tmp_path/'nx',tmp_path/'r',{'SPLM_LICENSE_SERVER':'W:/license'})
     policy=tmp_path/'policy.json'

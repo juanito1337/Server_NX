@@ -34,7 +34,7 @@ env:
 
 jobs:
   core:
-    name: Core ${{ matrix.platform.os }} / ${{ matrix.shard }}
+    name: Core ${{ matrix.platform.os }} / Python ${{ matrix.platform.python }} / ${{ matrix.shard }}
     runs-on: ${{ matrix.platform.os }}
     timeout-minutes: 120
     strategy:
