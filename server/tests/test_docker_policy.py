@@ -48,7 +48,9 @@ def execute(tmp_path,value,bindings,port=8765):
     try {{Assert-NXLocalDockerProfile -Configuration $inputData.configuration -ProjectRoot 'C:\SyntheticNxProject' -PermittedBindings $permitted -WebPort $inputData.port;Write-Output 'POLICY_OK'}}
     catch {{Write-Output ('POLICY_ERROR:'+ $_.Exception.Message);exit 9}}
     """
-    return subprocess.run([POWERSHELL,'-NoProfile','-ExecutionPolicy','Bypass','-Command',script],capture_output=True,text=True,timeout=20)
+    # Hosted Windows startup/module loading can exceed 20 seconds. This is a
+    # functional policy check, not a startup benchmark; keep a finite bound.
+    return subprocess.run([POWERSHELL,'-NoProfile','-ExecutionPolicy','Bypass','-Command',script],capture_output=True,text=True,timeout=60)
 
 
 @pytest.mark.parametrize('port',[8765,8766,1,65535])

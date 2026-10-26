@@ -6,6 +6,12 @@ Ein erfolgreicher Softwaretest ist keine CAM- oder Produktivfreigabe.
 
 ## Befehle
 
+Die beiden reinen PowerShell-Dockerprofilprüfer haben ein begrenztes Zeitbudget
+von 60 Sekunden je Prozess, einschließlich Windows-Start und Modulimport. Die
+zuvor verwendeten 20 Sekunden wurden auf GitHub-Windows-Runnern überschritten.
+Alle funktionalen Prüfungen bleiben erhalten; dies ist kein Performanznachweis
+und ändert das getrennte 15-Minuten-Budget der echten NX-Fälle nicht.
+
 Aus `server/` mit der separaten Python-Umgebung des Repositorys:
 
 ```powershell
@@ -211,6 +217,16 @@ fehlender PRT-Komponente und flacher Baugruppe sind zusätzlich praktisch zu
 qualifizieren. Versionsmigration 2406 → 2512 benötigt eine echte 2512-Installation.
 
 ## Abdeckung und Entwicklungssteuerung
+
+Sicherungsmetadaten und Archivmanifeste werden als eindeutige JSON-Objekte gelesen.
+Doppelte Felder, nichtendliche Zahlen, ungültige Unicode-Werte und falsche
+Dokumenttypen sperren den Beleg. Ein defekter Einzelbeleg erscheint in der Liste
+als ungültig; andere intakte Sicherungen bleiben auswählbar. Ein Bericht wird aus
+denselben begrenzt gelesenen, stabilen und SHA-geprüften Bytes dekodiert. Ein
+Dateiaustausch zwischen Hashprüfung und Rückgabe darf keinen Bericht freigeben.
+Die Gegenproben liegen in `test_backup_metadata.py` und
+`test_backup_metadata_browser.py`. Sie verwenden ausschließlich synthetische
+lokale Bestände; unbekannte endliche Zusatzfelder bleiben kompatibel lesbar.
 
 Vor einer Softwareabnahme werden die zwei Core- und vier Browser-Laufordner
 zusammen geprüft. Jeder Ordner muss `plan.json`, `summary.json`, `junit.xml` und

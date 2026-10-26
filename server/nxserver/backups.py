@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -13,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .auditstate import encoded
+from .bounded_file import read as read_bounded_file
 from .folders import FolderAccess, scoped_path
 from .integrity import Issues, metadata, release_root, snapshot
 from .migration import portable
@@ -36,15 +38,46 @@ def identifier(value):
     return value
 
 
-def read_json(path,limit=MAX_MANIFEST):
+def decode_json(raw):
+    """Every snapshot document is one unambiguous, finite JSON object."""
+    def invalid(value):raise ValueError('Unsupported JSON constant')
+    def finite(value):
+        number=float(value)
+        if not math.isfinite(number):raise ValueError('Nonfinite JSON number')
+        return number
+    def unique(pairs):
+        result={}
+        for name,value in pairs:
+            if name in result:raise ValueError('Duplicate JSON field')
+            result[name]=value
+        return result
+    try:
+        value=json.loads(raw,parse_constant=invalid,parse_float=finite,object_pairs_hook=unique)
+        if not isinstance(value,dict):raise ValueError('Snapshot object required')
+        pending=[value]
+        while pending:
+            item=pending.pop()
+            if isinstance(item,str):item.encode('utf-8')
+            elif isinstance(item,dict):pending.extend(item);pending.extend(item.values())
+            elif isinstance(item,list):pending.extend(item)
+        return value
+    except (ValueError,TypeError,UnicodeError,RecursionError,OverflowError) as error:
+        raise DomainError('Snapshot metadata is not a supported unique JSON object.',409) from error
+
+
+def read_json(path,limit=MAX_MANIFEST,*,expected_sha256=None):
     path=offline_path(path)
     try:
-        with path.open('rb') as stream:raw=stream.read(limit+1)
+        path.stat() # Preserve the missing-document status before the bounded reader.
     except FileNotFoundError as error:raise DomainError('Snapshot metadata not found.',404) from error
     except OSError as error:raise DomainError('Snapshot metadata cannot be read.',409) from error
-    if len(raw)>limit:raise DomainError('Snapshot metadata exceeds its reader bound.',409)
-    try:return json.loads(raw)
-    except (ValueError,TypeError) as error:raise DomainError('Snapshot metadata is malformed.',409) from error
+    try:
+        raw=read_bounded_file(path,max_bytes=limit,expected_sha256=expected_sha256,
+            changed_message='Snapshot metadata changed while reading.',
+            limit_message='Snapshot metadata is empty or exceeds its reader bound.')
+    except DomainError as error:
+        raise DomainError(str(error),409) from error
+    return decode_json(raw)
 
 
 def write_json(path,value):
@@ -241,12 +274,11 @@ class Backups:
         job=self.get_job(key)
         if not job.get('report_sha256'):raise DomainError('Backup report is not ready.',409)
         path=self._job_folder(key)/'report.json'
-        if sha256(offline_path(path))!=job['report_sha256']:raise DomainError('Backup report changed.',409)
-        return read_json(path)
+        return read_json(path,expected_sha256=job['report_sha256'])
 
     def receipt(self,key):
         value=read_json(self._folder(key)/'receipt.json',256*1024)
-        if value.get('schema_version')!=1 or value.get('id')!=key or value.get('status')!='ready':
+        if type(value.get('schema_version')) is not int or value['schema_version']!=1 or value.get('id')!=key or value.get('status')!='ready':
             raise DomainError('Backup is not a completed snapshot.',409)
         for field in ('archive_sha256','manifest_sha256'):
             if not isinstance(value.get(field),str) or not re.fullmatch('[a-f0-9]{64}',value[field]):raise DomainError('Invalid backup receipt.')
@@ -501,8 +533,9 @@ class Backups:
                 raise DomainError('Missing/oversized backup manifest.',409)
             raw=package.read('manifest.json')
             if hashlib.sha256(raw).hexdigest()!=receipt['manifest_sha256']:raise DomainError('Backup manifest SHA differs.',409)
-            manifest=json.loads(raw)
-            if manifest.get('schema_version')!=1 or manifest.get('id')!=backup_id:raise DomainError('Unsupported/mismatched backup manifest.')
+            manifest=decode_json(raw)
+            if type(manifest.get('schema_version')) is not int or manifest['schema_version']!=1 or manifest.get('id')!=backup_id:
+                raise DomainError('Unsupported/mismatched backup manifest.',409)
             groups=manifest['groups'];objects={};seen_groups=set();files=0;total=0
             for group in groups:
                 if group['kind'] in ('release','partial'):group_key=(group['kind'],identifier(group['id']))
